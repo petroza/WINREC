@@ -98,8 +98,8 @@ public partial class MainWindow : Window
 
         RecordingSourceBase source = selected.Source switch
         {
-            DisplayData d => new DisplayRecordingSource(d) { RecorderApi = RecorderApi.WindowsGraphicsCapture },
-            RecordableWindow w => new WindowRecordingSource(w) { RecorderApi = RecorderApi.WindowsGraphicsCapture },
+            RecordableDisplay d => new DisplayRecordingSource(d) { RecorderApi = RecorderApi.WindowsGraphicsCapture },
+            RecordableWindow w => new WindowRecordingSource(w),
             _ => throw new InvalidOperationException("Neznámý typ zdroje.")
         };
 
@@ -124,10 +124,8 @@ public partial class MainWindow : Window
             AudioOptions = new AudioOptions
             {
                 IsAudioEnabled = AudioOutputCheck.IsChecked == true || AudioInputCheck.IsChecked == true,
-                IsOutputDeviceEnabled = AudioOutputCheck.IsChecked == true,
-                IsInputDeviceEnabled = AudioInputCheck.IsChecked == true,
                 AudioOutputDevice = AudioOutputCheck.IsChecked == true
-                    ? Recorder.GetSystemAudioDevices(AudioDeviceSource.OutputDevices).FirstOrDefault()?.DeviceName
+                    ? Recorder.GetSystemAudioDevices(AudioDeviceSource.OutputDevices).FirstOrDefault()?.DeviceName ?? ""
                     : null,
                 AudioInputDevice = AudioInputCheck.IsChecked == true
                     ? Recorder.GetSystemAudioDevices(AudioDeviceSource.InputDevices).FirstOrDefault()?.DeviceName
