@@ -42,7 +42,6 @@
     gap: 0;
   }
 
-  /* ── Header ── */
   .header {
     display: flex;
     align-items: center;
@@ -61,7 +60,6 @@
   .rec-dot.active { opacity: 1; animation: pulse 1s ease-in-out infinite alternate; }
   @keyframes pulse { from { opacity: 1; } to { opacity: .2; } }
 
-  /* ── Card ── */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -88,10 +86,7 @@
 
   .row-value { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-  /* ── Controls ── */
-  .radio-group, .check-group {
-    display: flex; gap: 6px; flex-wrap: wrap;
-  }
+  .radio-group, .check-group { display: flex; gap: 6px; flex-wrap: wrap; }
 
   label.chip {
     display: inline-flex; align-items: center; gap: 6px;
@@ -128,7 +123,41 @@
     color: #a8c4ff;
   }
 
-  /* ── Status ── */
+  /* region chip with × clear button */
+  .region-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #1f5030;
+    background: #163a22;
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 500;
+    user-select: none;
+  }
+  .region-chip button {
+    padding: 0; background: none; border: none;
+    font-size: 14px; line-height: 1; cursor: pointer;
+    color: #6aaa7a; font-weight: 400; border-radius: 3px;
+    display: inline-flex; align-items: center;
+    transition: color .1s;
+  }
+  .region-chip button:hover { color: var(--red); }
+
+  .btn-pick-region {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--raised);
+    color: var(--dim);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-pick-region:hover:not(:disabled) { border-color: #4a7adf; color: var(--text); }
+  .btn-pick-region:disabled { opacity: .4; cursor: not-allowed; }
+
   .status-bar {
     margin-top: 10px;
     background: var(--surface);
@@ -157,7 +186,6 @@
   }
   .timer.visible { opacity: 1; }
 
-  /* ── Preview ── */
   .preview-wrap {
     margin-top: 10px;
     border-radius: 10px;
@@ -169,19 +197,20 @@
     position: relative;
   }
   .preview-wrap.visible { display: block; }
-  video.preview {
+  video.preview, canvas.preview-canvas {
     width: 100%; height: 100%;
     object-fit: contain;
     display: block;
   }
+  canvas.preview-canvas { position: absolute; top: 0; left: 0; }
   .preview-label {
     position: absolute; bottom: 8px; left: 10px;
     font-size: 11px; color: rgba(255,255,255,.45);
     font-family: var(--mono);
     pointer-events: none;
+    z-index: 2;
   }
 
-  /* ── Buttons ── */
   .btn-row {
     margin-top: 10px;
     display: flex;
@@ -227,7 +256,6 @@
   .btn-download.visible { display: inline-flex; }
   .btn-download:hover { background: #1a4d2c; }
 
-  /* ── Browser note ── */
   .note {
     margin-top: 14px;
     padding: 10px 14px;
@@ -242,7 +270,6 @@
   .note.visible { display: block; }
   .note strong { color: #8ab870; }
 
-  /* ── Footer ── */
   .footer {
     margin-top: 20px;
     text-align: center;
@@ -256,7 +283,60 @@
     .row { grid-template-columns: 1fr; gap: 6px; }
     .row-label { font-size: 11px; }
   }
+
+  /* ── Region Picker Overlay ── */
+  #regionOverlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 9999;
+    cursor: crosshair;
+    background: rgba(0,0,0,.55);
+  }
+  #regionOverlay.active { display: block; }
+  #regionOverlay .overlay-hint {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255,255,255,.7);
+    font-size: 15px;
+    font-weight: 500;
+    pointer-events: none;
+    text-shadow: 0 1px 4px rgba(0,0,0,.8);
+    text-align: center;
+    line-height: 1.7;
+  }
+  #regionOverlay .overlay-hint small {
+    display: block;
+    font-size: 12px;
+    color: rgba(255,255,255,.45);
+  }
+  #regionRect {
+    position: absolute;
+    border: 2px solid #22C55E;
+    background: rgba(34,197,94,.08);
+    pointer-events: none;
+    display: none;
+  }
+  #regionRect .size-label {
+    position: absolute;
+    top: -22px; left: 0;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: #22C55E;
+    background: rgba(0,0,0,.7);
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
 </style>
+
+<!-- Region picker overlay (hidden by default) -->
+<div id="regionOverlay">
+  <div class="overlay-hint">
+    Táhni myší pro výběr oblasti záznamu
+    <small>Stiskni Esc pro zrušení</small>
+  </div>
+  <div id="regionRect"><span class="size-label" id="sizeLabel"></span></div>
+</div>
 
 <div class="panel">
 
@@ -273,6 +353,13 @@
       <span class="row-label">Zdroj</span>
       <div class="row-value">
         <span style="font-size:12.5px;color:var(--dim)">Prohlížeč zobrazí výběr (obrazovka / okno / záložka) po kliknutí na Spustit.</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <span class="row-label">Oblast záznamu</span>
+      <div class="row-value" id="regionRow">
+        <button class="btn-pick-region" id="btnPickRegion">＋ Vybrat výřez</button>
       </div>
     </div>
 
@@ -323,6 +410,7 @@
 
   <div class="preview-wrap" id="previewWrap">
     <video class="preview" id="preview" muted autoplay playsinline></video>
+    <canvas class="preview-canvas" id="previewCanvas" style="display:none"></canvas>
     <span class="preview-label" id="previewLabel">LIVE</span>
   </div>
 
@@ -353,6 +441,8 @@
   let startTime = 0;
   let blobUrl = null;
   let currentMime = '';
+  let cropRegion = null;       // {x, y, w, h} in source-video pixels, or null = full
+  let rafId = null;            // requestAnimationFrame id for canvas render loop
 
   const $ = id => document.getElementById(id);
 
@@ -365,8 +455,7 @@
     { label: 'WebM',       mime: 'video/webm',                      ext: 'webm' },
   ];
 
-  const supported = FORMATS.filter(f =>
-    MediaRecorder.isTypeSupported(f.mime));
+  const supported = FORMATS.filter(f => MediaRecorder.isTypeSupported(f.mime));
 
   const fmtGroup = $('fmtGroup');
   supported.forEach((f, i) => {
@@ -387,6 +476,94 @@
     const idx = sel ? parseInt(sel.value) : 0;
     return supported[idx] || supported[0];
   }
+
+  // ── Region Picker ──────────────────────────────────────────────────────────
+  // The region is chosen in the *browser viewport* coordinate space.
+  // During recording we map it to the source video's pixel space.
+
+  const overlay    = $('regionOverlay');
+  const regionRect = $('regionRect');
+  const sizeLabel  = $('sizeLabel');
+  let picking = false;
+  let pickStart = null;
+  let pickCurrent = null;
+
+  function showRegionChip(r) {
+    const row = $('regionRow');
+    row.innerHTML = '';
+    const chip = document.createElement('div');
+    chip.className = 'region-chip';
+    chip.innerHTML = `${r.w}&nbsp;×&nbsp;${r.h} px&ensp;<button title="Zrušit výřez">×</button>`;
+    chip.querySelector('button').addEventListener('click', () => {
+      cropRegion = null;
+      row.innerHTML = '';
+      const btn = document.createElement('button');
+      btn.className = 'btn-pick-region';
+      btn.id = 'btnPickRegion';
+      btn.textContent = '＋ Vybrat výřez';
+      row.appendChild(btn);
+      btn.addEventListener('click', startRegionPick);
+    });
+    row.appendChild(chip);
+  }
+
+  function startRegionPick() {
+    picking = true;
+    pickStart = null;
+    pickCurrent = null;
+    regionRect.style.display = 'none';
+    overlay.classList.add('active');
+  }
+
+  $('btnPickRegion').addEventListener('click', startRegionPick);
+
+  overlay.addEventListener('mousedown', e => {
+    if (!picking) return;
+    e.preventDefault();
+    pickStart = { x: e.clientX, y: e.clientY };
+    regionRect.style.display = 'block';
+    overlay.querySelector('.overlay-hint').style.display = 'none';
+  });
+
+  overlay.addEventListener('mousemove', e => {
+    if (!picking || !pickStart) return;
+    pickCurrent = { x: e.clientX, y: e.clientY };
+    const x = Math.min(pickStart.x, pickCurrent.x);
+    const y = Math.min(pickStart.y, pickCurrent.y);
+    const w = Math.abs(pickCurrent.x - pickStart.x);
+    const h = Math.abs(pickCurrent.y - pickStart.y);
+    regionRect.style.left   = x + 'px';
+    regionRect.style.top    = y + 'px';
+    regionRect.style.width  = w + 'px';
+    regionRect.style.height = h + 'px';
+    sizeLabel.textContent   = `${w} × ${h}`;
+  });
+
+  overlay.addEventListener('mouseup', e => {
+    if (!picking || !pickStart) return;
+    picking = false;
+    overlay.classList.remove('active');
+    overlay.querySelector('.overlay-hint').style.display = '';
+
+    const x = Math.min(pickStart.x, e.clientX);
+    const y = Math.min(pickStart.y, e.clientY);
+    const w = Math.abs(e.clientX - pickStart.x);
+    const h = Math.abs(e.clientY - pickStart.y);
+
+    if (w < 10 || h < 10) return; // too small, ignore
+
+    // Store in viewport px (will be mapped to video px at record time)
+    cropRegion = { x, y, w, h, viewport: true };
+    showRegionChip({ w, h });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && picking) {
+      picking = false;
+      overlay.classList.remove('active');
+      overlay.querySelector('.overlay-hint').style.display = '';
+    }
+  });
 
   // ── UI helpers ─────────────────────────────────────────────────────────────
   function setStatus(msg, cls = '') {
@@ -423,6 +600,46 @@
     document.querySelectorAll('input[name="fmt"]').forEach(r => r.disabled = recording);
   }
 
+  // ── Canvas crop loop ───────────────────────────────────────────────────────
+  // Maps viewport-space cropRegion to source-video pixel space and draws
+  // cropped frames onto an offscreen canvas whose stream feeds MediaRecorder.
+
+  function startCropLoop(videoEl, offscreen, region, fps) {
+    const ctx = offscreen.getContext('2d');
+
+    function renderFrame() {
+      if (videoEl.readyState < 2) { rafId = requestAnimationFrame(renderFrame); return; }
+
+      const vw = videoEl.videoWidth;
+      const vh = videoEl.videoHeight;
+
+      // Map viewport coords → video coords
+      // The video covers the entire screen (or whatever the user shared).
+      // We assume the browser viewport ≈ the captured surface; for
+      // full-screen shares this is accurate. For window shares the user
+      // drew the region over the preview area — we use the ratio of the
+      // viewport to the video dimensions as the scale factor.
+      const scaleX = vw / window.screen.width;
+      const scaleY = vh / window.screen.height;
+
+      const sx = Math.round(region.x * scaleX);
+      const sy = Math.round(region.y * scaleY);
+      const sw = Math.round(region.w * scaleX);
+      const sh = Math.round(region.h * scaleY);
+
+      offscreen.width  = sw;
+      offscreen.height = sh;
+      ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      rafId = requestAnimationFrame(renderFrame);
+    }
+    renderFrame();
+  }
+
+  function stopCropLoop() {
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+
   // ── Start recording ────────────────────────────────────────────────────────
   $('btnStart').addEventListener('click', async () => {
     if (!supported.length) {
@@ -453,48 +670,93 @@
     }
 
     if (wantMic) {
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      } catch {
-        // mic failure is non-fatal
-      }
+      try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
+      catch { /* mic failure is non-fatal */ }
     }
 
-    // Mix audio tracks
-    let finalTracks = [...displayStream.getVideoTracks()];
+    // ── Build the stream that goes into MediaRecorder ──────────────────────
+    let recordStream;
 
     const hasSysAudio = displayStream.getAudioTracks().length > 0;
+
+    // Build mixed audio destination
+    let audioTracks = [];
     if (hasSysAudio || micStream) {
       try {
         const ctx = new AudioContext();
         const dest = ctx.createMediaStreamDestination();
-        if (hasSysAudio) {
-          ctx.createMediaStreamSource(displayStream).connect(dest);
+        if (hasSysAudio) ctx.createMediaStreamSource(displayStream).connect(dest);
+        if (micStream)   ctx.createMediaStreamSource(micStream).connect(dest);
+        audioTracks = dest.stream.getAudioTracks();
+      } catch { /* audio mixing failed — record video only */ }
+    }
+    if (wantSys && !hasSysAudio) $('noteAudio').classList.add('visible');
+
+    if (cropRegion) {
+      // Canvas-based crop: render frames from hidden <video> → offscreen canvas
+      const hiddenVid = document.createElement('video');
+      hiddenVid.srcObject = displayStream;
+      hiddenVid.muted = true;
+      hiddenVid.autoplay = true;
+      hiddenVid.style.display = 'none';
+      document.body.appendChild(hiddenVid);
+      await hiddenVid.play().catch(() => {});
+
+      // Wait for video metadata so we know dimensions
+      await new Promise(res => {
+        if (hiddenVid.videoWidth) { res(); return; }
+        hiddenVid.onloadedmetadata = res;
+        setTimeout(res, 2000);
+      });
+
+      const offscreen = document.createElement('canvas');
+      // Tentative size; updated per-frame inside startCropLoop
+      offscreen.width  = cropRegion.w;
+      offscreen.height = cropRegion.h;
+
+      startCropLoop(hiddenVid, offscreen, cropRegion, fps);
+
+      const canvasStream = offscreen.captureStream(fps);
+      recordStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+
+      // Show cropped preview in the panel canvas
+      const prevCanvas = $('previewCanvas');
+      prevCanvas.style.display = 'block';
+      $('preview').style.display = 'none';
+
+      // Mirror offscreen → prevCanvas
+      const prevCtx = prevCanvas.getContext('2d');
+      function mirrorFrame() {
+        if (offscreen.width && offscreen.height) {
+          prevCanvas.width  = offscreen.width;
+          prevCanvas.height = offscreen.height;
+          prevCtx.drawImage(offscreen, 0, 0);
         }
-        if (micStream) {
-          ctx.createMediaStreamSource(micStream).connect(dest);
-        }
-        finalTracks.push(...dest.stream.getAudioTracks());
-        if (wantSys && !hasSysAudio) $('noteAudio').classList.add('visible');
-      } catch {
-        // audio mixing failed — record video only
+        requestAnimationFrame(mirrorFrame);
       }
-    } else if (wantSys) {
-      $('noteAudio').classList.add('visible');
+      mirrorFrame();
+
+    } else {
+      // Full frame — direct stream
+      recordStream = new MediaStream([
+        ...displayStream.getVideoTracks(),
+        ...audioTracks,
+      ]);
+      $('preview').srcObject = displayStream;
+      $('preview').style.display = 'block';
+      $('previewCanvas').style.display = 'none';
     }
 
-    const stream = new MediaStream(finalTracks);
-
-    // Show preview
-    $('preview').srcObject = displayStream;
     $('previewWrap').classList.add('visible');
-    $('previewLabel').textContent = 'LIVE · ' + fps + ' fps';
+    $('previewLabel').textContent = cropRegion
+      ? `VÝŘEZ · ${cropRegion.w}×${cropRegion.h} · ${fps} fps`
+      : `LIVE · ${fps} fps`;
 
-    // MediaRecorder
+    // ── MediaRecorder ──────────────────────────────────────────────────────
     try {
-      mediaRecorder = new MediaRecorder(stream, { mimeType: currentMime });
+      mediaRecorder = new MediaRecorder(recordStream, { mimeType: currentMime });
     } catch {
-      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder = new MediaRecorder(recordStream);
       currentMime = mediaRecorder.mimeType;
     }
 
@@ -503,6 +765,8 @@
     };
 
     mediaRecorder.onstop = () => {
+      stopCropLoop();
+
       const blob = new Blob(chunks, { type: currentMime });
       blobUrl = URL.createObjectURL(blob);
       const ext = currentMime.startsWith('video/mp4') ? 'mp4' : 'webm';
@@ -512,22 +776,26 @@
       $('btnDownload').classList.add('visible');
 
       $('preview').srcObject = null;
+      $('previewCanvas').style.display = 'none';
+      $('preview').style.display = 'block';
       $('preview').src = blobUrl;
       $('previewLabel').textContent = ext.toUpperCase() + ' · ' + (blob.size / 1048576).toFixed(1) + ' MB';
       $('preview').controls = true;
 
       stopTimer();
       setRecordingUI(false);
-      setStatus(`Hotovo — soubor připraven ke stažení.`, 'ok');
+      setStatus('Hotovo — soubor připraven ke stažení.', 'ok');
 
       displayStream.getTracks().forEach(t => t.stop());
       if (micStream) micStream.getTracks().forEach(t => t.stop());
+
+      // Clean up hidden video if it was created
+      const hv = document.querySelector('video[style*="display: none"]');
+      if (hv) hv.remove();
     };
 
     displayStream.getVideoTracks()[0].onended = () => {
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-      }
+      if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
     };
 
     mediaRecorder.start(1000);
@@ -538,9 +806,7 @@
 
   // ── Stop ──────────────────────────────────────────────────────────────────
   $('btnStop').addEventListener('click', () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
-    }
+    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
   });
 
   // ── Download ──────────────────────────────────────────────────────────────
