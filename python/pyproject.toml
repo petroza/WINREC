@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winrec"
+version = "1.0.0"
+description = "Windows Screen Recorder — screen/window to MP4 H.264 with audio"
+requires-python = ">=3.10"
+dependencies = [
+    "mss>=9.0",
+    "av>=12.0",
+    "numpy>=1.24",
+    "soundcard>=0.4.2",
+    "pywin32>=305",
+    "pillow>=10.0",
+]
+
+[project.scripts]
+winrec = "winrec.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
