@@ -17,8 +17,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        SetDefaultOutputPath();
-        PopulateSources();
+        Loaded += (_, _) =>
+        {
+            SetDefaultOutputPath();
+            PopulateSources();
+        };
     }
 
     private void SetDefaultOutputPath()
@@ -30,6 +33,7 @@ public partial class MainWindow : Window
 
     private void PopulateSources()
     {
+        if (SourceCombo == null || SourceLabel == null) return;
         SourceCombo.Items.Clear();
 
         if (SourceTypeCombo.SelectedIndex == 1)
