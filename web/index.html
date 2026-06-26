@@ -1,0 +1,561 @@
+<title>WINREC Web</title>
+<meta name="description" content="Nahrávání obrazovky přímo v prohlížeči — bez instalace, bez serveru.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0D1829;
+    --surface: #1A2740;
+    --raised:  #243350;
+    --border:  #2E4060;
+    --text:    #E8EFF8;
+    --dim:     #7A90AA;
+    --accent:  #2563EB;
+    --accent2: #1D4ED8;
+    --green:   #22C55E;
+    --red:     #EF4444;
+    --red2:    #B91C1C;
+    --font:    -apple-system, "Segoe UI", system-ui, sans-serif;
+    --mono:    "Cascadia Code", "Consolas", "SF Mono", monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .panel {
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 0 18px 0;
+  }
+  .logo { font-size: 20px; font-weight: 700; letter-spacing: -.3px; color: var(--text); }
+  .logo-sub { font-size: 13px; color: var(--dim); margin-top: 1px; }
+  .rec-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  .rec-dot.active { opacity: 1; animation: pulse 1s ease-in-out infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: .2; } }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; }
+
+  .row-label {
+    font-size: 12px;
+    color: var(--dim);
+    font-weight: 500;
+    letter-spacing: .02em;
+  }
+
+  .row-value { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* ── Controls ── */
+  .radio-group, .check-group {
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+
+  label.chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--raised);
+    color: var(--dim);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  label.chip:has(input:checked) {
+    border-color: var(--accent);
+    background: #1e3a6e;
+    color: var(--text);
+  }
+  label.chip input { display: none; }
+  label.chip:hover { border-color: #4a7adf; color: var(--text); }
+
+  .format-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--border);
+    color: var(--dim);
+    letter-spacing: .04em;
+  }
+  label.chip:has(input:checked) .format-badge {
+    background: var(--accent2);
+    color: #a8c4ff;
+  }
+
+  /* ── Status ── */
+  .status-bar {
+    margin-top: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 52px;
+  }
+  .status-text { font-size: 12.5px; color: var(--dim); }
+  .status-text.ok { color: var(--green); }
+  .status-text.err { color: var(--red); }
+  .timer {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--green);
+    letter-spacing: .04em;
+    font-variant-numeric: tabular-nums;
+    opacity: 0;
+    transition: opacity .2s;
+    white-space: nowrap;
+  }
+  .timer.visible { opacity: 1; }
+
+  /* ── Preview ── */
+  .preview-wrap {
+    margin-top: 10px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: #000;
+    aspect-ratio: 16/9;
+    display: none;
+    position: relative;
+  }
+  .preview-wrap.visible { display: block; }
+  video.preview {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .preview-label {
+    position: absolute; bottom: 8px; left: 10px;
+    font-size: 11px; color: rgba(255,255,255,.45);
+    font-family: var(--mono);
+    pointer-events: none;
+  }
+
+  /* ── Buttons ── */
+  .btn-row {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+  }
+
+  button {
+    border: none; cursor: pointer;
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 12px 20px;
+    transition: background .15s, opacity .15s, transform .1s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  button:active:not(:disabled) { transform: scale(.98); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn-start {
+    flex: 1;
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-start:hover:not(:disabled) { background: var(--accent2); }
+
+  .btn-stop {
+    background: var(--red);
+    color: #fff;
+    width: 130px;
+  }
+  .btn-stop:hover:not(:disabled) { background: var(--red2); }
+  .btn-stop:disabled { background: #3a1c1c; color: #7a3a3a; opacity: 1; }
+
+  .btn-download {
+    flex: 1;
+    background: #163a22;
+    color: var(--green);
+    border: 1px solid #1f5030;
+    display: none;
+  }
+  .btn-download.visible { display: inline-flex; }
+  .btn-download:hover { background: #1a4d2c; }
+
+  /* ── Browser note ── */
+  .note {
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #2a3a1a;
+    background: #141f10;
+    font-size: 11.5px;
+    color: #6a8a5a;
+    line-height: 1.6;
+    display: none;
+  }
+  .note.visible { display: block; }
+  .note strong { color: #8ab870; }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--border);
+  }
+  .footer a { color: #3a5a8a; text-decoration: none; }
+  .footer a:hover { color: var(--dim); }
+
+  @media (max-width: 400px) {
+    .row { grid-template-columns: 1fr; gap: 6px; }
+    .row-label { font-size: 11px; }
+  }
+</style>
+
+<div class="panel">
+
+  <div class="header">
+    <div class="rec-dot" id="recDot"></div>
+    <div>
+      <div class="logo">WINREC</div>
+      <div class="logo-sub">Web Screen Recorder</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <span class="row-label">Zdroj</span>
+      <div class="row-value">
+        <span style="font-size:12.5px;color:var(--dim)">Prohlížeč zobrazí výběr (obrazovka / okno / záložka) po kliknutí na Spustit.</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <span class="row-label">Zvuk</span>
+      <div class="row-value check-group">
+        <label class="chip">
+          <input type="checkbox" id="chkSys" checked>
+          <span>Zvuk systému</span>
+        </label>
+        <label class="chip">
+          <input type="checkbox" id="chkMic">
+          <span>Mikrofon</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <span class="row-label">Kvalita videa</span>
+      <div class="row-value radio-group">
+        <label class="chip">
+          <input type="radio" name="fps" value="60">
+          <span>60 fps</span>
+        </label>
+        <label class="chip">
+          <input type="radio" name="fps" value="30" checked>
+          <span>30 fps</span>
+        </label>
+        <label class="chip">
+          <input type="radio" name="fps" value="15">
+          <span>15 fps</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <span class="row-label">Formát výstupu</span>
+      <div class="row-value radio-group" id="fmtGroup">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-text" id="statusText">Připraveno k záznamu.</span>
+    <span class="timer" id="timer">00:00:00</span>
+  </div>
+
+  <div class="preview-wrap" id="previewWrap">
+    <video class="preview" id="preview" muted autoplay playsinline></video>
+    <span class="preview-label" id="previewLabel">LIVE</span>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-start" id="btnStart">▶&nbsp; Spustit záznam</button>
+    <button class="btn-download" id="btnDownload">⬇&nbsp; Stáhnout</button>
+    <button class="btn-stop" id="btnStop" disabled>■&nbsp; Zastavit</button>
+  </div>
+
+  <div class="note" id="noteAudio">
+    <strong>Tip:</strong> Zvuk systému funguje v Chrome a Edge na Windows — v dialogu zaškrtni
+    <em>"Sdílet zvuk systému"</em>. Firefox systémový zvuk nepodporuje.
+  </div>
+
+  <div class="footer">
+    <a href="https://github.com/petroza/WINREC" target="_blank">petroza/WINREC</a>
+    &nbsp;·&nbsp; běží 100% v prohlížeči, nic se neodesílá
+  </div>
+
+</div>
+
+<script>
+(() => {
+  // ── State ──────────────────────────────────────────────────────────────────
+  let mediaRecorder = null;
+  let chunks = [];
+  let timerInterval = null;
+  let startTime = 0;
+  let blobUrl = null;
+  let currentMime = '';
+
+  const $ = id => document.getElementById(id);
+
+  // ── Detect supported MIME types ────────────────────────────────────────────
+  const FORMATS = [
+    { label: 'MP4 H.264',  mime: 'video/mp4;codecs=h264,aac',      ext: 'mp4'  },
+    { label: 'MP4',        mime: 'video/mp4',                       ext: 'mp4'  },
+    { label: 'WebM VP9',   mime: 'video/webm;codecs=vp9,opus',      ext: 'webm' },
+    { label: 'WebM VP8',   mime: 'video/webm;codecs=vp8,opus',      ext: 'webm' },
+    { label: 'WebM',       mime: 'video/webm',                      ext: 'webm' },
+  ];
+
+  const supported = FORMATS.filter(f =>
+    MediaRecorder.isTypeSupported(f.mime));
+
+  const fmtGroup = $('fmtGroup');
+  supported.forEach((f, i) => {
+    const ext = f.ext.toUpperCase();
+    fmtGroup.insertAdjacentHTML('beforeend', `
+      <label class="chip">
+        <input type="radio" name="fmt" value="${i}" ${i === 0 ? 'checked' : ''}>
+        <span>${f.label}</span>
+        <span class="format-badge">${ext}</span>
+      </label>`);
+  });
+  if (!supported.length) {
+    fmtGroup.innerHTML = '<span style="color:var(--red);font-size:12px">Žádný formát nepodporován — zkus Chrome nebo Edge.</span>';
+  }
+
+  function getSelectedFormat() {
+    const sel = fmtGroup.querySelector('input[name="fmt"]:checked');
+    const idx = sel ? parseInt(sel.value) : 0;
+    return supported[idx] || supported[0];
+  }
+
+  // ── UI helpers ─────────────────────────────────────────────────────────────
+  function setStatus(msg, cls = '') {
+    const el = $('statusText');
+    el.textContent = msg;
+    el.className = 'status-text ' + cls;
+  }
+
+  function startTimer() {
+    startTime = Date.now();
+    $('timer').classList.add('visible');
+    timerInterval = setInterval(() => {
+      const s = Math.floor((Date.now() - startTime) / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      $('timer').textContent =
+        `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    }, 500);
+  }
+
+  function stopTimer() {
+    clearInterval(timerInterval);
+    $('timer').classList.remove('visible');
+  }
+
+  function setRecordingUI(recording) {
+    $('recDot').classList.toggle('active', recording);
+    $('btnStart').disabled = recording;
+    $('btnStop').disabled = !recording;
+    $('chkSys').disabled = recording;
+    $('chkMic').disabled = recording;
+    document.querySelectorAll('input[name="fps"]').forEach(r => r.disabled = recording);
+    document.querySelectorAll('input[name="fmt"]').forEach(r => r.disabled = recording);
+  }
+
+  // ── Start recording ────────────────────────────────────────────────────────
+  $('btnStart').addEventListener('click', async () => {
+    if (!supported.length) {
+      setStatus('Tento prohlížeč nepodporuje nahrávání.', 'err');
+      return;
+    }
+    $('btnDownload').classList.remove('visible');
+    if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+    chunks = [];
+
+    const fps = parseInt(document.querySelector('input[name="fps"]:checked').value);
+    const wantSys = $('chkSys').checked;
+    const wantMic = $('chkMic').checked;
+    const fmt = getSelectedFormat();
+    currentMime = fmt.mime;
+
+    let displayStream, micStream;
+
+    try {
+      displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: fps, cursor: 'always' },
+        audio: wantSys,
+      });
+    } catch (e) {
+      if (e.name === 'NotAllowedError') setStatus('Povolení odepřeno.', 'err');
+      else setStatus('Nelze zachytit obrazovku: ' + e.message, 'err');
+      return;
+    }
+
+    if (wantMic) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } catch {
+        // mic failure is non-fatal
+      }
+    }
+
+    // Mix audio tracks
+    let finalTracks = [...displayStream.getVideoTracks()];
+
+    const hasSysAudio = displayStream.getAudioTracks().length > 0;
+    if (hasSysAudio || micStream) {
+      try {
+        const ctx = new AudioContext();
+        const dest = ctx.createMediaStreamDestination();
+        if (hasSysAudio) {
+          ctx.createMediaStreamSource(displayStream).connect(dest);
+        }
+        if (micStream) {
+          ctx.createMediaStreamSource(micStream).connect(dest);
+        }
+        finalTracks.push(...dest.stream.getAudioTracks());
+        if (wantSys && !hasSysAudio) $('noteAudio').classList.add('visible');
+      } catch {
+        // audio mixing failed — record video only
+      }
+    } else if (wantSys) {
+      $('noteAudio').classList.add('visible');
+    }
+
+    const stream = new MediaStream(finalTracks);
+
+    // Show preview
+    $('preview').srcObject = displayStream;
+    $('previewWrap').classList.add('visible');
+    $('previewLabel').textContent = 'LIVE · ' + fps + ' fps';
+
+    // MediaRecorder
+    try {
+      mediaRecorder = new MediaRecorder(stream, { mimeType: currentMime });
+    } catch {
+      mediaRecorder = new MediaRecorder(stream);
+      currentMime = mediaRecorder.mimeType;
+    }
+
+    mediaRecorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: currentMime });
+      blobUrl = URL.createObjectURL(blob);
+      const ext = currentMime.startsWith('video/mp4') ? 'mp4' : 'webm';
+      const now = new Date();
+      const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}`;
+      $('btnDownload').dataset.filename = `záznam_${ts}.${ext}`;
+      $('btnDownload').classList.add('visible');
+
+      $('preview').srcObject = null;
+      $('preview').src = blobUrl;
+      $('previewLabel').textContent = ext.toUpperCase() + ' · ' + (blob.size / 1048576).toFixed(1) + ' MB';
+      $('preview').controls = true;
+
+      stopTimer();
+      setRecordingUI(false);
+      setStatus(`Hotovo — soubor připraven ke stažení.`, 'ok');
+
+      displayStream.getTracks().forEach(t => t.stop());
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+    };
+
+    displayStream.getVideoTracks()[0].onended = () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+    };
+
+    mediaRecorder.start(1000);
+    setRecordingUI(true);
+    startTimer();
+    setStatus('Nahrávám…', 'ok');
+  });
+
+  // ── Stop ──────────────────────────────────────────────────────────────────
+  $('btnStop').addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+  });
+
+  // ── Download ──────────────────────────────────────────────────────────────
+  $('btnDownload').addEventListener('click', () => {
+    if (!blobUrl) return;
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = $('btnDownload').dataset.filename || 'zaznam.webm';
+    a.click();
+  });
+
+  // ── Check API support ──────────────────────────────────────────────────────
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    setStatus('Tento prohlížeč nepodporuje Screen Capture API.', 'err');
+    $('btnStart').disabled = true;
+  }
+})();
+</script>
