@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -13,6 +14,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _timer;
     private TimeSpan _elapsed;
     private bool _isRecording;
+    private Rect? _selectedRegion;
 
     public MainWindow()
     {
@@ -36,39 +38,82 @@ public partial class MainWindow : Window
         if (SourceCombo == null || SourceLabel == null) return;
         SourceCombo.Items.Clear();
 
-        if (SourceTypeCombo.SelectedIndex == 1)
+        bool isWindow = SourceTypeCombo.SelectedIndex == 1;
+        PickWindowBtn.Visibility = isWindow ? Visibility.Visible : Visibility.Collapsed;
+
+        if (isWindow)
         {
-            // Windows
             SourceLabel.Text = "Okno";
             foreach (var w in Recorder.GetWindows())
-            {
                 SourceCombo.Items.Add(new SourceItem(w.Title, w));
-            }
         }
         else
         {
-            // Displays
             SourceLabel.Text = "Monitor";
             foreach (var d in Recorder.GetDisplays())
-            {
                 SourceCombo.Items.Add(new SourceItem(d.FriendlyName ?? d.DeviceName, d));
-            }
         }
 
         if (SourceCombo.Items.Count > 0)
             SourceCombo.SelectedIndex = 0;
     }
 
-    private void SourceTypeCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void SourceTypeCombo_SelectionChanged(object sender,
+        System.Windows.Controls.SelectionChangedEventArgs e) => PopulateSources();
+
+    private void RefreshSources_Click(object sender, RoutedEventArgs e) => PopulateSources();
+
+    // ── Window picker ──────────────────────────────────────────────────────────
+    private void PickWindow_Click(object sender, RoutedEventArgs e)
     {
-        PopulateSources();
+        Hide();
+        var picker = new WindowPicker();
+        picker.Closed += (_, _) =>
+        {
+            Show();
+            Activate();
+            if (picker.PickedWindow == null) return;
+
+            // Select picked window in combo
+            foreach (SourceItem item in SourceCombo.Items)
+            {
+                if (item.Source is RecordableWindow w && w.Handle == picker.PickedWindow.Handle)
+                {
+                    SourceCombo.SelectedItem = item;
+                    return;
+                }
+            }
+            // Not in list yet — add it
+            var newItem = new SourceItem(picker.PickedWindow.Title, picker.PickedWindow);
+            SourceCombo.Items.Insert(0, newItem);
+            SourceCombo.SelectedIndex = 0;
+        };
+        picker.Show();
     }
 
-    private void RefreshSources_Click(object sender, RoutedEventArgs e)
+    // ── Region picker ──────────────────────────────────────────────────────────
+    private void PickRegion_Click(object sender, RoutedEventArgs e)
     {
-        PopulateSources();
+        var picker = new RegionPicker();
+        picker.Closed += (_, _) =>
+        {
+            Activate();
+            if (picker.SelectedRegion == null)
+            {
+                _selectedRegion = null;
+                RegionBox.Text = "Celá plocha / celé okno";
+                RegionBox.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
+                return;
+            }
+            _selectedRegion = picker.SelectedRegion;
+            var r = _selectedRegion.Value;
+            RegionBox.Text = $"{(int)r.X}, {(int)r.Y}  —  {(int)r.Width} × {(int)r.Height} px";
+            RegionBox.Foreground = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
+        };
+        picker.Show();
     }
 
+    // ── Browse output ──────────────────────────────────────────────────────────
     private void BrowseOutput_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new SaveFileDialog
@@ -81,38 +126,39 @@ public partial class MainWindow : Window
             OutputPathBox.Text = dlg.FileName;
     }
 
+    // ── Start recording ────────────────────────────────────────────────────────
     private void StartRecording_Click(object sender, RoutedEventArgs e)
     {
         if (SourceCombo.SelectedItem is not SourceItem selected)
         {
-            MessageBox.Show("Vyberte zdroj záznamu.", "WINREC", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("Vyberte zdroj záznamu.", "WINREC",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         var outputPath = OutputPathBox.Text.Trim();
         if (string.IsNullOrEmpty(outputPath))
         {
-            MessageBox.Show("Zadejte výstupní soubor.", "WINREC", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("Zadejte výstupní soubor.", "WINREC",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
-        var bitrate = int.Parse(((System.Windows.Controls.ComboBoxItem)QualityCombo.SelectedItem).Tag!.ToString()!);
+        var bitrate = int.Parse(
+            ((System.Windows.Controls.ComboBoxItem)QualityCombo.SelectedItem).Tag!.ToString()!);
 
         RecordingSourceBase source = selected.Source switch
         {
-            RecordableDisplay d => new DisplayRecordingSource(d) { RecorderApi = RecorderApi.WindowsGraphicsCapture },
-            RecordableWindow w => new WindowRecordingSource(w),
+            RecordableDisplay d => BuildDisplaySource(d),
+            RecordableWindow w => BuildWindowSource(w),
             _ => throw new InvalidOperationException("Neznámý typ zdroje.")
         };
 
         var options = new RecorderOptions
         {
-            SourceOptions = new SourceOptions
-            {
-                RecordingSources = { source }
-            },
+            SourceOptions = new SourceOptions { RecordingSources = { source } },
             VideoEncoderOptions = new VideoEncoderOptions
             {
                 Encoder = new H264VideoEncoder
@@ -129,10 +175,12 @@ public partial class MainWindow : Window
             {
                 IsAudioEnabled = AudioOutputCheck.IsChecked == true || AudioInputCheck.IsChecked == true,
                 AudioOutputDevice = AudioOutputCheck.IsChecked == true
-                    ? Recorder.GetSystemAudioDevices(AudioDeviceSource.OutputDevices).FirstOrDefault()?.DeviceName ?? ""
+                    ? Recorder.GetSystemAudioDevices(AudioDeviceSource.OutputDevices)
+                        .FirstOrDefault()?.DeviceName ?? ""
                     : null,
                 AudioInputDevice = AudioInputCheck.IsChecked == true
-                    ? Recorder.GetSystemAudioDevices(AudioDeviceSource.InputDevices).FirstOrDefault()?.DeviceName
+                    ? Recorder.GetSystemAudioDevices(AudioDeviceSource.InputDevices)
+                        .FirstOrDefault()?.DeviceName
                     : null
             },
             OutputOptions = new OutputOptions
@@ -145,7 +193,6 @@ public partial class MainWindow : Window
         _recorder = Recorder.CreateRecorder(options);
         _recorder.OnRecordingComplete += OnRecordingComplete;
         _recorder.OnRecordingFailed += OnRecordingFailed;
-
         _recorder.Record(outputPath);
 
         _isRecording = true;
@@ -154,10 +201,37 @@ public partial class MainWindow : Window
         SetStatus($"Nahrávám → {Path.GetFileName(outputPath)}", "#22C55E");
     }
 
-    private void StopRecording_Click(object sender, RoutedEventArgs e)
+    private RecordingSourceBase BuildDisplaySource(RecordableDisplay d)
     {
-        StopRecording();
+        var src = new DisplayRecordingSource(d)
+        {
+            RecorderApi = RecorderApi.WindowsGraphicsCapture
+        };
+        if (_selectedRegion.HasValue)
+        {
+            var r = _selectedRegion.Value;
+            var (monLeft, monTop) = NativeMethods.GetMonitorOrigin(d.DeviceName);
+            src.SourceRect = new ScreenRect(
+                (int)(r.X - monLeft),
+                (int)(r.Y - monTop),
+                (int)r.Width, (int)r.Height);
+        }
+        return src;
     }
+
+    private RecordingSourceBase BuildWindowSource(RecordableWindow w)
+    {
+        var src = new WindowRecordingSource(w);
+        if (_selectedRegion.HasValue)
+        {
+            var r = _selectedRegion.Value;
+            src.SourceRect = new ScreenRect(0, 0, (int)r.Width, (int)r.Height);
+        }
+        return src;
+    }
+
+    // ── Stop ───────────────────────────────────────────────────────────────────
+    private void StopRecording_Click(object sender, RoutedEventArgs e) => StopRecording();
 
     private void StopRecording()
     {
@@ -166,9 +240,7 @@ public partial class MainWindow : Window
         _isRecording = false;
         StopTimer();
         UpdateUI(recording: false);
-        SetStatus("Záznam dokončen. Soubor byl uložen.", "#94A3B8");
-
-        // Refresh output path for next recording
+        SetStatus("Záznam dokončen.", "#94A3B8");
         SetDefaultOutputPath();
     }
 
@@ -195,6 +267,7 @@ public partial class MainWindow : Window
         });
     }
 
+    // ── Timer ──────────────────────────────────────────────────────────────────
     private void StartTimer()
     {
         _elapsed = TimeSpan.Zero;
@@ -203,13 +276,15 @@ public partial class MainWindow : Window
         RecordingIndicator.Visibility = Visibility.Visible;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        bool blink = true;
         _timer.Tick += (_, _) =>
         {
             _elapsed = _elapsed.Add(TimeSpan.FromSeconds(1));
             TimerText.Text = _elapsed.ToString(@"hh\:mm\:ss");
-            RecordingIndicator.Fill = RecordingIndicator.Fill is SolidColorBrush b && b.Color == Colors.Transparent
+            RecordingIndicator.Fill = blink
                 ? new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44))
                 : new SolidColorBrush(Colors.Transparent);
+            blink = !blink;
         };
         _timer.Start();
     }
@@ -222,12 +297,14 @@ public partial class MainWindow : Window
         RecordingIndicator.Visibility = Visibility.Collapsed;
     }
 
+    // ── Helpers ────────────────────────────────────────────────────────────────
     private void UpdateUI(bool recording)
     {
         StartButton.IsEnabled = !recording;
         StopButton.IsEnabled = recording;
         SourceTypeCombo.IsEnabled = !recording;
         SourceCombo.IsEnabled = !recording;
+        PickWindowBtn.IsEnabled = !recording;
         AudioOutputCheck.IsEnabled = !recording;
         AudioInputCheck.IsEnabled = !recording;
         QualityCombo.IsEnabled = !recording;
