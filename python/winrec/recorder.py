@@ -81,8 +81,7 @@ class Recorder:
         need_audio = _HAS_SOUNDCARD and (cfg.capture_system_audio or cfg.capture_mic)
         if need_audio:
             aus = self._container.add_stream("aac", rate=cfg.sample_rate)
-            aus.channels = cfg.channels
-            aus.layout = "stereo"
+            aus.layout = "stereo"   # sets channels implicitly (PyAV 12+)
             self._audio_out_stream = aus
 
         # Start threads
