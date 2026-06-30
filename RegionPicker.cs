@@ -127,9 +127,19 @@ public class RegionPicker : Window
         var h = _selRect.Height;
         if (w > 16 && h > 16)
         {
-            var topLeft = PointToScreen(new Point(
-                Canvas.GetLeft(_selRect), Canvas.GetTop(_selRect)));
-            SelectedRegion = new Rect(topLeft.X, topLeft.Y, w, h);
+            var left = Canvas.GetLeft(_selRect);
+            var top  = Canvas.GetTop(_selRect);
+
+            // Convert BOTH corners to physical screen pixels so width/height
+            // are also in physical pixels. Using a logical width/height with a
+            // physical origin breaks the crop under DPI scaling (>100%) and
+            // can blow the region up to the whole monitor.
+            var p1 = PointToScreen(new Point(left, top));
+            var p2 = PointToScreen(new Point(left + w, top + h));
+
+            SelectedRegion = new Rect(
+                Math.Round(p1.X), Math.Round(p1.Y),
+                Math.Round(p2.X - p1.X), Math.Round(p2.Y - p1.Y));
         }
         Close();
     }
