@@ -20,8 +20,8 @@ echo  Found: %PYVER%
 echo.
 
 echo  [1/2] Installing dependencies...
-python -m pip install --user --quiet --upgrade pip
-python -m pip install --user --quiet mss av numpy soundcard pywin32 pillow
+python -m pip install --user --quiet --no-warn-script-location --upgrade pip
+python -m pip install --user --quiet --no-warn-script-location mss av numpy soundcard pywin32 pillow
 if errorlevel 1 (
     echo  [ERROR] Dependency install failed.
     pause
@@ -30,7 +30,7 @@ if errorlevel 1 (
 echo        OK
 
 echo  [2/2] Installing WINREC...
-python -m pip install --user --quiet --force-reinstall .
+python -m pip install --user --quiet --no-warn-script-location --force-reinstall .
 if errorlevel 1 (
     echo  [ERROR] WINREC install failed.
     pause
