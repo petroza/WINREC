@@ -1,66 +1,52 @@
 @echo off
-chcp 65001 >nul
-title WINREC — Instalace
+title WINREC - Install
 
 echo.
-echo  ╔══════════════════════════════════════╗
-echo  ║   WINREC — automatická instalace     ║
-echo  ╚══════════════════════════════════════╝
+echo  WINREC - Installation
+echo  =====================
 echo.
 
-:: Ověř Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo  [CHYBA] Python nenalezen.
-    echo  Stáhni Python 3.10+ z https://www.python.org/downloads/
-    echo  Při instalaci zaškrtni "Add Python to PATH"
+    echo  [ERROR] Python not found.
+    echo  Download Python 3.10+ from https://www.python.org/downloads/
+    echo  During install, check "Add Python to PATH"
     pause
     exit /b 1
 )
 
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do set PYVER=%%v
-echo  Nalezen: %PYVER%
+echo  Found: %PYVER%
 echo.
 
-:: Instalace závislostí
-echo  [1/2] Instaluji závislosti...
+echo  [1/2] Installing dependencies...
 python -m pip install --user --quiet --upgrade pip
 python -m pip install --user --quiet mss av numpy soundcard pywin32 pillow
 if errorlevel 1 (
-    echo  [CHYBA] Instalace závislostí selhala.
+    echo  [ERROR] Dependency install failed.
     pause
     exit /b 1
 )
 echo        OK
 
-:: Instalace winrec
-echo  [2/2] Instaluji WINREC...
-python -m pip install --user --quiet --force-reinstall "git+https://github.com/petroza/WINREC.git#subdirectory=python"
+echo  [2/2] Installing WINREC...
+python -m pip install --user --quiet --force-reinstall .
 if errorlevel 1 (
-    echo.
-    echo  [CHYBA] Instalace z GitHubu selhala.
-    echo  Zkus spustit znovu nebo zkontroluj připojení k internetu.
+    echo  [ERROR] WINREC install failed.
     pause
     exit /b 1
 )
 echo        OK
 echo.
-echo  ══════════════════════════════════════
-echo   Instalace dokončena!
-echo  ══════════════════════════════════════
-echo.
-echo  Spuštění:   python -m winrec
+echo  Done! Run with:  python -m winrec
 echo.
 
-:: Nabídni okamžité spuštění
-choice /c AN /n /m "  Spustit WINREC teď? [A]no / [N]e: "
-if errorlevel 2 goto :konec
-if errorlevel 1 (
+set /p LAUNCH="  Launch WINREC now? [Y/N]: "
+if /i "%LAUNCH%"=="Y" (
     echo.
-    echo  Spouštím WINREC...
+    echo  Starting WINREC...
     python -m winrec
 )
 
-:konec
 echo.
 pause
