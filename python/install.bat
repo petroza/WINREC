@@ -13,10 +13,10 @@ echo.
 set PYTHON=
 
 python --version >nul 2>&1
-if not errorlevel 1 ( set PYTHON=python & goto :python_ok )
+if not errorlevel 1 ( set "PYTHON=python" & goto :python_ok )
 
 py --version >nul 2>&1
-if not errorlevel 1 ( set PYTHON=py & goto :python_ok )
+if not errorlevel 1 ( set "PYTHON=py" & goto :python_ok )
 
 for %%P in (
     "%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
