@@ -60,10 +60,24 @@ class App(tk.Tk):
         self._timer_thread: Optional[threading.Thread] = None
         self._start_time: float = 0.0
         self._sources: list[DisplaySource | WindowSource] = []
+        self._preview: Optional["_PreviewWindow"] = None
+
+        # Scale Tk to the real screen DPI so text is rendered crisp (with
+        # ClearType anti-aliasing) instead of small/blurry on high-DPI displays.
+        self._apply_dpi_scaling()
 
         self._build_ui()
         self._refresh_sources()
         self._set_default_output()
+
+    def _apply_dpi_scaling(self):
+        try:
+            import ctypes
+            dpi = ctypes.windll.user32.GetDpiForSystem()
+            if dpi and dpi > 0:
+                self.tk.call("tk", "scaling", dpi / 72.0)
+        except Exception:
+            pass
 
     # ── UI construction ────────────────────────────────────────────────────────
 
@@ -110,6 +124,9 @@ class App(tk.Tk):
         tk.Frame(bf, bg=BG, width=8).pack(side="left")
         self._stop_btn = self._btn(bf, "■  Stop", DANGER, self._stop_recording)
         self._stop_btn.pack(side="right", ipadx=16, ipady=8)
+        # Keep the label + square white in every state (incl. disabled).
+        self._stop_btn.configure(fg="white", activeforeground="white",
+                                 disabledforeground="white")
         self._stop_btn.configure(state="disabled")
 
         self.update_idletasks()
@@ -347,6 +364,37 @@ class App(tk.Tk):
         self._timer_thread = threading.Thread(target=self._run_timer, daemon=True)
         self._timer_thread.start()
 
+        # Live preview thumbnail (bottom-left) so the user can verify the
+        # exact region being captured, in real time.
+        self._open_preview(src, self._selected_region)
+
+    def _region_getter(self, src, region):
+        """Return a callable giving the current capture rect (window may move)."""
+        def _get():
+            if region:
+                return region
+            if isinstance(src, DisplaySource):
+                return src.as_mss_monitor()
+            if isinstance(src, WindowSource):
+                return src.get_rect()
+            return None
+        return _get
+
+    def _open_preview(self, src, region):
+        self._close_preview()
+        try:
+            self._preview = _PreviewWindow(self, self._region_getter(src, region))
+        except Exception:
+            self._preview = None  # preview is non-essential; never block recording
+
+    def _close_preview(self):
+        if self._preview is not None:
+            try:
+                self._preview.close()
+            except Exception:
+                pass
+            self._preview = None
+
     def _stop_recording(self):
         if self._recorder:
             threading.Thread(target=self._recorder.stop, daemon=True).start()
@@ -355,13 +403,20 @@ class App(tk.Tk):
         self._timer_lbl.configure(text="")
         self._dot.pack_forget()
         self._status("Recording stopped.", FG_DIM)
+        self._close_preview()
         self._set_default_output()
 
     def _on_complete(self, path: str):
+        # Remember the folder we actually saved into.
+        try:
+            _save_last_dir(os.path.dirname(path))
+        except Exception:
+            pass
         self.after(0, lambda: (
             self._set_ui_recording(False),
             self._timer_lbl.configure(text=""),
             self._dot.pack_forget(),
+            self._close_preview(),
             self._status(f"Saved: {path}", SUCCESS),
             self._set_default_output()
         ))
@@ -371,6 +426,7 @@ class App(tk.Tk):
             self._set_ui_recording(False),
             self._timer_lbl.configure(text=""),
             self._dot.pack_forget(),
+            self._close_preview(),
             self._status(f"Error: {msg}", DANGER),
             messagebox.showerror("WINREC — recording error", msg)
         ))
@@ -411,6 +467,85 @@ class App(tk.Tk):
 
 
 # ── Picker overlays ────────────────────────────────────────────────────────────
+
+class _PreviewWindow(tk.Toplevel):
+    """Small always-on-top live preview of the captured region, pinned to the
+    bottom-left corner of the primary screen. Refreshes ~5×/second via mss."""
+
+    THUMB_W = 260          # thumbnail width in px
+    INTERVAL_MS = 200      # refresh period
+
+    def __init__(self, parent, get_region):
+        super().__init__(parent)
+        self._get_region = get_region
+        self._alive = True
+        self._imgtk = None
+
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        try:
+            self.attributes("-alpha", 0.92)
+        except Exception:
+            pass
+        self.configure(bg="#22C55E")  # thin green frame = "this is being recorded"
+
+        wrap = tk.Frame(self, bg="#22C55E")
+        wrap.pack(padx=2, pady=2)
+
+        bar = tk.Label(wrap, text="● REC — live preview",
+                       fg="white", bg="#0F172A",
+                       font=("Segoe UI", 8, "bold"), anchor="w", padx=6, pady=2)
+        bar.pack(fill="x")
+
+        self._label = tk.Label(wrap, bg="#000000", bd=0)
+        self._label.pack()
+
+        # Own mss instance (this runs in the GUI thread; the recorder has its own).
+        import mss as _mss
+        self._sct = _mss.mss()
+
+        self._tick()
+
+    def _tick(self):
+        if not self._alive:
+            return
+        try:
+            region = self._get_region()
+            if region and region.get("width", 0) > 0 and region.get("height", 0) > 0:
+                from PIL import Image, ImageTk
+                raw = self._sct.grab({
+                    "left":   int(region["left"]),
+                    "top":    int(region["top"]),
+                    "width":  int(region["width"]),
+                    "height": int(region["height"]),
+                })
+                img = Image.frombytes("RGB", raw.size, raw.rgb)
+                w = self.THUMB_W
+                h = max(1, int(raw.height * w / raw.width))
+                img = img.resize((w, h))
+                self._imgtk = ImageTk.PhotoImage(img)
+                self._label.configure(image=self._imgtk)
+
+                # Pin to bottom-left (leave room for the taskbar).
+                self.update_idletasks()
+                sh = self.winfo_screenheight()
+                wh = self.winfo_height()
+                self.geometry(f"+8+{sh - wh - 56}")
+        except Exception:
+            pass
+        self.after(self.INTERVAL_MS, self._tick)
+
+    def close(self):
+        self._alive = False
+        try:
+            self._sct.close()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
 
 class _PickerOverlay(tk.Toplevel):
     """Fullscreen transparent window — click to pick a window."""
