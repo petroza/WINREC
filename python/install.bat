@@ -14,14 +14,36 @@ echo  (Full log: %LOGFILE%)
 echo.
 
 :: ── 1. Find Python ─────────────────────────────────────────────────────────
+::
+:: IMPORTANT: we resolve "python"/"py" via `where` (does NOT execute the file)
+:: before running --version on it. On many corporate machines, "python"/"py"
+:: in PATH is just the Microsoft Store app-execution-alias stub living under
+:: ...\WindowsApps\...\py.exe — running it triggers a Windows Defender /
+:: Smart App Control block dialog that waits for the user, instead of failing
+:: cleanly. We skip any resolved path under WindowsApps and keep searching
+:: real installations instead.
 
 set "PYTHON="
 
-python --version >>"%LOGFILE%" 2>&1
-if not errorlevel 1 ( set "PYTHON=python" & goto :python_found )
+for /f "delims=" %%W in ('where python 2^>nul') do (
+    echo %%W | find /i "WindowsApps" >nul
+    if errorlevel 1 (
+        set "PYTHON=%%W"
+        goto :python_found
+    ) else (
+        echo  Skipping Microsoft Store stub: %%W >>"%LOGFILE%"
+    )
+)
 
-py --version >>"%LOGFILE%" 2>&1
-if not errorlevel 1 ( set "PYTHON=py" & goto :python_found )
+for /f "delims=" %%W in ('where py 2^>nul') do (
+    echo %%W | find /i "WindowsApps" >nul
+    if errorlevel 1 (
+        set "PYTHON=%%W"
+        goto :python_found
+    ) else (
+        echo  Skipping Microsoft Store stub: %%W >>"%LOGFILE%"
+    )
+)
 
 for %%P in (
     "%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
@@ -56,11 +78,19 @@ for %%P in (
     )
 )
 
-echo  [ERROR] Python 3.10+ not found on this computer. >>"%LOGFILE%"
-echo  [ERROR] Python 3.10+ not found on this computer.
+echo  [ERROR] No usable Python installation found. >>"%LOGFILE%"
+echo  [ERROR] No usable Python installation found.
 echo.
-echo  Download from: https://www.python.org/downloads/
-echo  During install, check "Add Python to PATH"
+echo  If Windows just showed a "Zabezpeceni Windows" / blocked-content popup,
+echo  that means only the Microsoft Store version of Python is present, and
+echo  your IT policy blocks Microsoft Store apps. That version cannot be used.
+echo.
+echo  Fix: install Python directly from python.org (NOT the Microsoft Store):
+echo    1. Go to https://www.python.org/downloads/
+echo    2. Download and run the installer
+echo    3. Check "Add python.exe to PATH"
+echo    4. Choose "Install Now" (installs for your user only, no admin needed)
+echo    5. Run this installer again
 echo.
 pause
 exit /b 1
