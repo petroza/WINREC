@@ -27,6 +27,7 @@ class RecordingConfig:
     region: Optional[dict] = None   # {"left","top","width","height"} in screen px
     fps: int = 30
     video_bitrate: int = 4_000_000
+    codec: str = "h264"          # "h264" or "h265"
     capture_system_audio: bool = True
     capture_mic: bool = False
     sample_rate: int = 44100
@@ -64,7 +65,13 @@ class Recorder:
         h = mon["height"] & ~1
 
         # Video stream
-        vs = self._container.add_stream("h264", rate=cfg.fps)
+        codec_name = "hevc" if cfg.codec == "h265" else "h264"
+        try:
+            vs = self._container.add_stream(codec_name, rate=cfg.fps)
+        except Exception:
+            # Fall back to H.264 if the HEVC encoder isn't available (e.g. no libx265)
+            codec_name = "h264"
+            vs = self._container.add_stream(codec_name, rate=cfg.fps)
         vs.width = w
         vs.height = h
         vs.pix_fmt = "yuv420p"

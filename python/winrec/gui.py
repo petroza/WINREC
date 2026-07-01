@@ -88,6 +88,7 @@ class App(tk.Tk):
         self._make_row("Audio",         self._build_audio)
         self._make_row("Frame rate",    self._build_fps)
         self._make_row("Quality",       self._build_quality)
+        self._make_row("Codec",         self._build_codec)
         self._make_row("Output file",   self._build_output)
 
         # Status bar
@@ -189,6 +190,16 @@ class App(tk.Tk):
                            value=val, bg=BG, fg=FG, selectcolor=BG2,
                            activebackground=BG, activeforeground=FG,
                            font=FONT).pack(side="left", padx=(0, 8))
+
+    def _build_codec(self, row):
+        self._codec_var = tk.StringVar(value="h264")
+        f = tk.Frame(row, bg=BG)
+        f.pack(side="left")
+        for label, val in [("H.264 (AVC)", "h264"), ("H.265 (HEVC)", "h265")]:
+            tk.Radiobutton(f, text=label, variable=self._codec_var,
+                           value=val, bg=BG, fg=FG, selectcolor=BG2,
+                           activebackground=BG, activeforeground=FG,
+                           font=FONT).pack(side="left", padx=(0, 10))
 
     def _build_output(self, row):
         self._output_var = tk.StringVar()
@@ -315,6 +326,7 @@ class App(tk.Tk):
             region=self._selected_region,
             fps=int(self._fps_var.get()),
             video_bitrate=int(self._quality_var.get()) * 1000,
+            codec=self._codec_var.get(),
             capture_system_audio=self._sys_audio_var.get(),
             capture_mic=self._mic_var.get(),
         )
