@@ -206,14 +206,14 @@ public partial class MainWindow : Window
             _ => throw new InvalidOperationException("Unknown source type.")
         };
 
-        // Determine output frame size for cropped recording
+        // Determine output frame size for cropped recording.
+        // H.264/H.265 (yuv420p) require EVEN width/height — round down to even.
         ScreenSize outputSize = new ScreenSize(0, 0);
         if (_selectedRegion.HasValue)
-            outputSize = new ScreenSize((int)_selectedRegion.Value.Width, (int)_selectedRegion.Value.Height);
-        else if (selected.Source is RecordableWindow rw)
         {
-            // For window sources size is determined by the window; let ScreenRecorderLib decide
-            outputSize = new ScreenSize(0, 0);
+            int ow = (int)_selectedRegion.Value.Width  & ~1;
+            int oh = (int)_selectedRegion.Value.Height & ~1;
+            outputSize = new ScreenSize(ow, oh);
         }
 
         // Build encoder
@@ -284,7 +284,7 @@ public partial class MainWindow : Window
             var (monLeft, monTop) = NativeMethods.GetMonitorOrigin(d.DeviceName);
             src.SourceRect = new ScreenRect(
                 (int)(r.X - monLeft), (int)(r.Y - monTop),
-                (int)r.Width, (int)r.Height);
+                (int)r.Width & ~1, (int)r.Height & ~1);
         }
         return src;
     }
