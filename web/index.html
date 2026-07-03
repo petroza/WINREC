@@ -346,6 +346,15 @@
     </div>
 
     <div class="row">
+      <span class="row-label">Kurzor</span>
+      <div class="row-value radio-group">
+        <label class="chip"><input type="radio" name="cursor" value="click"><span>Kurzor + kliknutí</span></label>
+        <label class="chip"><input type="radio" name="cursor" value="cursor" checked><span>Jen kurzor</span></label>
+        <label class="chip"><input type="radio" name="cursor" value="none"><span>Bez kurzoru</span></label>
+      </div>
+    </div>
+
+    <div class="row">
       <span class="row-label">Formát výstupu</span>
       <div class="row-value radio-group" id="fmtGroup">
         <!-- filled by JS -->
@@ -377,6 +386,13 @@
   <div class="note" id="noteAudio">
     <strong>Tip:</strong> Zvuk systému funguje v Chrome a Edge na Windows — v dialogu zaškrtni
     <em>"Sdílet zvuk systému"</em>. Firefox systémový zvuk nepodporuje.
+  </div>
+
+  <div class="note" id="noteCursor">
+    <strong>Kurzor + kliknutí:</strong> animované kolečko se vykreslí u kliknutí,
+    která proběhnou nad tímto oknem prohlížeče — ideální když v dialogu zvolíš
+    <em>„Kartu prohlížeče"</em> a necháš okno WINREC viditelné. Kliknutí v jiných
+    aplikacích prohlížeč z principu nevidí (systémový kurzor se ale nahraje).
   </div>
 
   <div class="footer">
@@ -440,6 +456,7 @@
         fps: document.querySelector('input[name="fps"]:checked')?.value,
         quality: document.querySelector('input[name="quality"]:checked')?.value,
         fmt: fmtGroup.querySelector('input[name="fmt"]:checked')?.value,
+        cursor: document.querySelector('input[name="cursor"]:checked')?.value,
         sys: $('chkSys').checked,
         mic: $('chkMic').checked,
       };
@@ -453,13 +470,22 @@
       if (s.fps)     { const el = document.querySelector(`input[name="fps"][value="${s.fps}"]`); if (el) el.checked = true; }
       if (s.quality) { const el = document.querySelector(`input[name="quality"][value="${s.quality}"]`); if (el) el.checked = true; }
       if (s.fmt !== undefined) { const el = fmtGroup.querySelector(`input[name="fmt"][value="${s.fmt}"]`); if (el) el.checked = true; }
+      if (s.cursor) { const el = document.querySelector(`input[name="cursor"][value="${s.cursor}"]`); if (el) el.checked = true; }
       if (typeof s.sys === 'boolean') $('chkSys').checked = s.sys;
       if (typeof s.mic === 'boolean') $('chkMic').checked = s.mic;
     } catch {}
   }
   loadSettings();
-  document.querySelectorAll('input[name="fps"],input[name="quality"],input[name="fmt"],#chkSys,#chkMic')
+  document.querySelectorAll('input[name="fps"],input[name="quality"],input[name="fmt"],input[name="cursor"],#chkSys,#chkMic')
     .forEach(el => el.addEventListener('change', saveSettings));
+
+  // Show the click-highlight note only when that cursor mode is selected.
+  function syncCursorNote() {
+    const mode = document.querySelector('input[name="cursor"]:checked')?.value;
+    $('noteCursor').classList.toggle('visible', mode === 'click');
+  }
+  document.querySelectorAll('input[name="cursor"]').forEach(el => el.addEventListener('change', syncCursorNote));
+  syncCursorNote();
 
   // ── Audio mode: System / Mic can combine; "Bez zvuku" is exclusive ──────────
   const chkSys = $('chkSys'), chkMic = $('chkMic'), chkNone = $('chkNone');
@@ -529,6 +555,77 @@
     document.querySelectorAll('input[name="fps"]').forEach(r => r.disabled = recording);
     document.querySelectorAll('input[name="quality"]').forEach(r => r.disabled = recording);
     document.querySelectorAll('input[name="fmt"]').forEach(r => r.disabled = recording);
+    document.querySelectorAll('input[name="cursor"]').forEach(r => r.disabled = recording);
+  }
+
+  // ── Click-highlight compositor ───────────────────────────────────────────────
+  // Draws the captured screen onto a canvas and paints an animated ring at every
+  // mouse press. The browser only receives pointer events while the pointer is
+  // over the WINREC page, so rings appear for clicks made over this tab (great
+  // when you capture "Karta prohlížeče"). The native cursor is still recorded for
+  // clicks elsewhere. Returns the composited video track + a stop() cleanup.
+  function buildClickCompositor(displayStream, fps) {
+    const vTrack = displayStream.getVideoTracks()[0];
+    const st = vTrack.getSettings();
+    const vw = st.width  || 1920;
+    const vh = st.height || 1080;
+
+    const srcVideo = document.createElement('video');
+    srcVideo.muted = true;
+    srcVideo.playsInline = true;
+    srcVideo.srcObject = new MediaStream([vTrack]);
+    srcVideo.play().catch(() => {});
+
+    const canvas = document.createElement('canvas');
+    canvas.width = vw;
+    canvas.height = vh;
+    const c = canvas.getContext('2d', { alpha: false });
+
+    const rings = [];
+    const RING_MS = 650;
+    const baseR = Math.max(vw, vh) * 0.030;
+
+    function onDown(e) {
+      const nx = e.clientX / Math.max(1, window.innerWidth);
+      const ny = e.clientY / Math.max(1, window.innerHeight);
+      rings.push({ x: nx * vw, y: ny * vh, t0: performance.now(), left: e.button === 0 });
+      if (rings.length > 12) rings.shift();
+    }
+    window.addEventListener('pointerdown', onDown, true);
+
+    let rafId = null;
+    function frame() {
+      try { c.drawImage(srcVideo, 0, 0, vw, vh); } catch {}
+      const now = performance.now();
+      for (let i = rings.length - 1; i >= 0; i--) {
+        const age = now - rings[i].t0;
+        if (age >= RING_MS) { rings.splice(i, 1); continue; }
+        const p = age / RING_MS;          // 0 → 1
+        const fade = 1 - p;
+        const r = baseR * (0.4 + p * 1.1);
+        const col = rings[i].left ? '37,99,235' : '245,158,11';  // accent blue / amber
+        c.beginPath();
+        c.arc(rings[i].x, rings[i].y, r, 0, Math.PI * 2);
+        c.fillStyle = `rgba(${col},${0.22 * fade})`;
+        c.fill();
+        c.lineWidth = Math.max(2, baseR * 0.16) * fade;
+        c.strokeStyle = `rgba(${col},${0.95 * fade})`;
+        c.stroke();
+      }
+      rafId = requestAnimationFrame(frame);
+    }
+    frame();
+
+    const outStream = canvas.captureStream(fps);
+    return {
+      track: outStream.getVideoTracks()[0],
+      stop() {
+        if (rafId) cancelAnimationFrame(rafId);
+        window.removeEventListener('pointerdown', onDown, true);
+        outStream.getTracks().forEach(t => t.stop());
+        srcVideo.srcObject = null;
+      },
+    };
   }
 
   // ── Start recording ────────────────────────────────────────────────────────
@@ -547,6 +644,7 @@
     const videoBps = parseInt(document.querySelector('input[name="quality"]:checked').value);
     const wantSys = $('chkSys').checked;
     const wantMic = $('chkMic').checked;
+    const cursorMode = document.querySelector('input[name="cursor"]:checked')?.value || 'cursor';
     const fmt = getSelectedFormat();
     currentMime = fmt.mime;
 
@@ -554,7 +652,7 @@
 
     try {
       displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: fps, max: fps }, cursor: 'always' },
+        video: { frameRate: { ideal: fps, max: fps }, cursor: cursorMode === 'none' ? 'never' : 'always' },
         audio: wantSys,
       });
     } catch (e) {
@@ -574,8 +672,21 @@
       }
     }
 
+    // In "click" mode we composite the screen through a canvas so an animated
+    // ring can be painted at each mouse press; otherwise record the raw capture.
+    let compositor = null;
+    let recordVideoTrack = displayStream.getVideoTracks()[0];
+    if (cursorMode === 'click') {
+      try {
+        compositor = buildClickCompositor(displayStream, fps);
+        recordVideoTrack = compositor.track;
+      } catch {
+        compositor = null;  // fall back to raw capture on any failure
+      }
+    }
+
     // Mix audio tracks
-    let finalTracks = [...displayStream.getVideoTracks()];
+    let finalTracks = [recordVideoTrack];
 
     const hasSysAudio = displayStream.getAudioTracks().length > 0;
     if (hasSysAudio || micStream) {
@@ -595,9 +706,9 @@
 
     const stream = new MediaStream(finalTracks);
 
-    // Show preview
+    // Show preview — the composited canvas (with rings) in click mode, else raw.
     $('preview').controls = false;
-    $('preview').srcObject = displayStream;
+    $('preview').srcObject = compositor ? new MediaStream([recordVideoTrack]) : displayStream;
     $('previewWrap').classList.add('visible');
 
     const settings = displayStream.getVideoTracks()[0].getSettings();
@@ -640,6 +751,7 @@
       $('recDot').className = 'rec-dot';
       setStatus(`Hotovo — ${fmtBytes(blob.size)} připraveno ke stažení.`, 'ok');
 
+      if (compositor) compositor.stop();
       displayStream.getTracks().forEach(t => t.stop());
       if (micStream) micStream.getTracks().forEach(t => t.stop());
     };
