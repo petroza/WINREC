@@ -1,168 +1,403 @@
 <Window x:Class="WINREC.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="WINREC" Height="540" Width="600"
-        ResizeMode="CanMinimize"
-        Background="#0F172A"
-        Foreground="White"
-        FontFamily="Segoe UI"
-        WindowStartupLocation="CenterScreen">
+        Title="WINREC" Width="620" SizeToContent="Height" MinWidth="560"
+        ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Text}"
+        FontFamily="Segoe UI" FontSize="13"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
 
-    <Grid Margin="24">
+    <Window.TaskbarItemInfo>
+        <TaskbarItemInfo x:Name="Taskbar"/>
+    </Window.TaskbarItemInfo>
+
+    <Window.Resources>
+        <Style x:Key="Icon" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
-            <Ellipse Width="12" Height="12" Fill="#EF4444" x:Name="RecordingIndicator"
-                     Visibility="Collapsed" Margin="0,0,8,0"/>
-            <TextBlock Text="WINREC" FontSize="22" FontWeight="Bold" Foreground="#F1F5F9"/>
-            <TextBlock Text=" — Windows Screen Recorder" FontSize="14" Foreground="#64748B"
-                       VerticalAlignment="Bottom" Margin="0,0,0,2"/>
-        </StackPanel>
-
-        <!-- Source type -->
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="140"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Zdroj záznamu" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
-            <ComboBox Grid.Column="1" x:Name="SourceTypeCombo"
-                      SelectionChanged="SourceTypeCombo_SelectionChanged">
-                <ComboBoxItem Content="Celá obrazovka (monitor)" IsSelected="True" Tag="Display"/>
-                <ComboBoxItem Content="Konkrétní okno" Tag="Window"/>
-            </ComboBox>
-        </Grid>
-
-        <!-- Source selector -->
-        <Grid Grid.Row="4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="140"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="6"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="6"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock x:Name="SourceLabel" Text="Monitor" Foreground="#94A3B8"
-                       FontSize="12" VerticalAlignment="Center"/>
-            <ComboBox Grid.Column="1" x:Name="SourceCombo"/>
-            <Button Grid.Column="3" Content="Obnovit" Style="{StaticResource SecondaryButton}"
-                    FontSize="11" Click="RefreshSources_Click" Padding="10,6"/>
-            <Button Grid.Column="5" x:Name="PickWindowBtn"
-                    Content="🎯 Vybrat kliknutím" Style="{StaticResource SecondaryButton}"
-                    FontSize="11" Click="PickWindow_Click" Padding="10,6"
-                    Visibility="Collapsed"/>
-        </Grid>
-
-        <!-- Region picker -->
-        <Grid Grid.Row="6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="140"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="6"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Oblast záznamu" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
-            <TextBox Grid.Column="1" x:Name="RegionBox"
-                     Background="#1E293B" Foreground="#64748B"
-                     BorderBrush="#334155" BorderThickness="1"
-                     Padding="8,6" FontSize="11" IsReadOnly="True"
-                     Text="Celá plocha / celé okno"/>
-            <Button Grid.Column="3" Content="Vybrat myší…" Style="{StaticResource SecondaryButton}"
-                    FontSize="11" Click="PickRegion_Click" Padding="10,6"/>
-        </Grid>
-
-        <!-- Audio -->
-        <Grid Grid.Row="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="140"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Zvuk" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
-            <StackPanel Grid.Column="1">
-                <CheckBox x:Name="AudioOutputCheck"
-                          Content="Zvuk systému (reproduktory / loopback)"
-                          Foreground="#F1F5F9" FontSize="12" IsChecked="True" Margin="0,0,0,6"/>
-                <CheckBox x:Name="AudioInputCheck"
-                          Content="Mikrofon"
-                          Foreground="#F1F5F9" FontSize="12" IsChecked="False"/>
+        <!-- ═══ Hlavička ═══ -->
+        <Grid Grid.Row="0" Margin="22,16,22,12">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse x:Name="RecDot" Width="12" Height="12" Fill="{StaticResource Rec}" Margin="0,2,10,0" VerticalAlignment="Center"/>
+                <TextBlock Text="WINREC" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBlock x:Name="VersionText" Text="v2.0" Foreground="{StaticResource Subtle}" FontSize="12"
+                           VerticalAlignment="Bottom" Margin="8,0,0,5"/>
             </StackPanel>
+            <Border x:Name="TimerPill" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"
+                    Background="#2A1215" BorderBrush="#7F1D1D" BorderThickness="1" CornerRadius="8" Padding="12,4">
+                <TextBlock x:Name="TimerText" Text="00:00:00" FontFamily="Cascadia Mono, Consolas" FontSize="20"
+                           FontWeight="SemiBold" Foreground="#FCA5A5"/>
+            </Border>
         </Grid>
 
-        <!-- Quality -->
-        <Grid Grid.Row="10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="140"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Kvalita videa" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
-            <ComboBox Grid.Column="1" x:Name="QualityCombo">
-                <ComboBoxItem Content="Vysoká (4000 kbps)" Tag="4000" IsSelected="True"/>
-                <ComboBoxItem Content="Střední (2000 kbps)" Tag="2000"/>
-                <ComboBoxItem Content="Nízká (1000 kbps)" Tag="1000"/>
-            </ComboBox>
-        </Grid>
-
-        <!-- Output file -->
-        <Grid Grid.Row="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="140"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="6"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Výstupní soubor" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
-            <TextBox Grid.Column="1" x:Name="OutputPathBox"
-                     Background="#1E293B" Foreground="#F1F5F9"
-                     BorderBrush="#334155" BorderThickness="1"
-                     Padding="8,6" FontSize="12" IsReadOnly="True"/>
-            <Button Grid.Column="3" Content="Procházet…" Style="{StaticResource SecondaryButton}"
-                    FontSize="11" Click="BrowseOutput_Click" Padding="10,6"/>
-        </Grid>
-
-        <!-- Status -->
-        <Border Grid.Row="13" Background="#1E293B" CornerRadius="6" Padding="12,8"
-                VerticalAlignment="Bottom" Margin="0,0,0,12">
+        <!-- ═══ Nastavení ═══ -->
+        <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="22,0,22,4">
             <StackPanel>
-                <TextBlock x:Name="StatusText" Text="Připraveno k záznamu."
-                           Foreground="#94A3B8" FontSize="12"/>
-                <TextBlock x:Name="TimerText" Text=""
-                           Foreground="#22C55E" FontSize="20" FontWeight="Bold"
-                           Visibility="Collapsed" Margin="0,4,0,0"/>
+
+                <!-- CO NAHRÁVAT -->
+                <Border x:Name="SourceCard" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Text="CO NAHRÁVAT" Style="{StaticResource CardTitle}"/>
+                        <Border Background="{StaticResource Field}" CornerRadius="9" BorderBrush="{StaticResource FieldBorder}" BorderThickness="1">
+                            <UniformGrid Columns="3">
+                                <RadioButton x:Name="SrcMonitor" GroupName="src" Style="{StaticResource Segment}" Checked="Source_Changed">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7F4;" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Celá obrazovka"/>
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton x:Name="SrcWindow" GroupName="src" Style="{StaticResource Segment}" Checked="Source_Changed">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8A7;" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Okno aplikace"/>
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton x:Name="SrcRegion" GroupName="src" Style="{StaticResource Segment}" Checked="Source_Changed">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7A8;" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Oblast"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </UniformGrid>
+                        </Border>
+
+                        <Grid x:Name="MonitorPanel" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Monitor" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="MonitorCombo" Grid.Column="1" SelectionChanged="AnySetting_Changed"/>
+                        </Grid>
+
+                        <StackPanel x:Name="WindowPanel" Margin="0,12,0,0" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="78"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Okno" Style="{StaticResource FieldLabel}"/>
+                                <ComboBox x:Name="WindowCombo" Grid.Column="1" DropDownOpened="WindowCombo_DropDownOpened"
+                                          SelectionChanged="WindowCombo_SelectionChanged"/>
+                                <Button x:Name="PickWindowBtn" Grid.Column="3" Click="PickWindow_Click"
+                                        ToolTip="Skryje WINREC a nechá vás kliknout přímo na okno, které chcete nahrávat.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7C9;" Margin="0,0,7,0"/>
+                                        <TextBlock Text="Vybrat kliknutím"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                            <TextBlock Style="{StaticResource Hint}" Margin="78,8,0,0"
+                                       Text="Okno se nahrává i když je překryté jiným oknem. Minimalizované okno nahrát nejde. Pro nejplynulejší video (a efekty kliknutí) nahrávejte raději celou obrazovku nebo oblast."/>
+                        </StackPanel>
+
+                        <Grid x:Name="RegionPanel" Margin="0,12,0,0" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Oblast" Style="{StaticResource FieldLabel}"/>
+                            <Border Grid.Column="1" Background="{StaticResource Field}" BorderBrush="{StaticResource FieldBorder}"
+                                    BorderThickness="1" CornerRadius="7" Padding="10,7">
+                                <TextBlock x:Name="RegionText" Text="Zatím nevybráno" TextTrimming="CharacterEllipsis"/>
+                            </Border>
+                            <Button x:Name="PickRegionBtn" Grid.Column="3" Click="PickRegion_Click"
+                                    ToolTip="Skryje WINREC a nechá vás myší označit obdélník na obrazovce.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE7A8;" Margin="0,0,7,0"/>
+                                    <TextBlock Text="Vybrat myší"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ZVUK -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Text="ZVUK" Style="{StaticResource CardTitle}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Nahrávat" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="AudioModeCombo" Grid.Column="1" SelectionChanged="AudioMode_Changed"/>
+                        </Grid>
+
+                        <!-- Systémový zvuk -->
+                        <Grid x:Name="SystemAudioPanel" Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE767;" Foreground="{StaticResource Muted}" Margin="0,0,7,0" FontSize="13"/>
+                                <TextBlock Text="Systém" Style="{StaticResource FieldLabel}"/>
+                            </StackPanel>
+                            <ComboBox x:Name="OutputCombo" Grid.Column="1" SelectionChanged="OutputCombo_SelectionChanged"
+                                      ToolTip="Zvuk, který slyšíte z reproduktorů nebo sluchátek na tomto zařízení."/>
+                            <Grid Grid.Row="1" Grid.Column="1" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="46"/>
+                                </Grid.ColumnDefinitions>
+                                <ProgressBar x:Name="SystemMeter" Style="{StaticResource Meter}" VerticalAlignment="Center"/>
+                                <Slider x:Name="SystemVolume" Grid.Column="2" Value="1" ValueChanged="Volume_Changed"
+                                        ToolTip="Hlasitost systémového zvuku v nahrávce"/>
+                                <TextBlock x:Name="SystemVolText" Grid.Column="3" Text="100 %" Foreground="{StaticResource Muted}"
+                                           FontSize="11.5" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Grid>
+
+                        <!-- Mikrofon -->
+                        <Grid x:Name="MicPanel" Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE720;" Foreground="{StaticResource Muted}" Margin="0,0,7,0" FontSize="13"/>
+                                <TextBlock Text="Mikrofon" Style="{StaticResource FieldLabel}"/>
+                            </StackPanel>
+                            <ComboBox x:Name="MicCombo" Grid.Column="1" SelectionChanged="MicCombo_SelectionChanged"/>
+                            <TextBlock x:Name="MicPlaceholder" Grid.Column="1" Text="— mikrofon není připojený —" IsHitTestVisible="False"
+                                       Foreground="{StaticResource Subtle}" Margin="11,0,30,0" VerticalAlignment="Center" FontSize="12.5"/>
+                            <Button x:Name="RefreshAudioBtn" Grid.Column="3" Click="RefreshAudio_Click" Padding="9,7"
+                                    ToolTip="Znovu načíst zvuková zařízení (připojení mikrofonu se ale pozná i samo).">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13"/>
+                            </Button>
+                            <Grid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="46"/>
+                                </Grid.ColumnDefinitions>
+                                <ProgressBar x:Name="MicMeter" Style="{StaticResource Meter}" VerticalAlignment="Center"
+                                             ToolTip="Úroveň mikrofonu — při běžné řeči by měla sahat do zelené až žluté části."/>
+                                <Slider x:Name="MicVolume" Grid.Column="2" Value="1" ValueChanged="Volume_Changed"
+                                        ToolTip="Hlasitost mikrofonu v nahrávce"/>
+                                <TextBlock x:Name="MicVolText" Grid.Column="3" Text="100 %" Foreground="{StaticResource Muted}"
+                                           FontSize="11.5" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            </Grid>
+                            <Border x:Name="MicWarning" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,10,0,0"
+                                    Background="#2A2110" BorderBrush="#78350F" BorderThickness="1" CornerRadius="7" Padding="10,7"
+                                    Visibility="Collapsed">
+                                <TextBlock x:Name="MicWarningText" Foreground="#FCD34D" FontSize="12" TextWrapping="Wrap"/>
+                            </Border>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                                <CheckBox x:Name="SaveWavCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                          Content="Uložit mikrofon i jako samostatný WAV (čistá stopa pro střih)"
+                                          ToolTip="Vedle videa vznikne soubor …_mikrofon.wav. V Premiere ho sesynchronizujete přes Synchronize → Audio."/>
+                                <CheckBox x:Name="MicMonoCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                          Content="Mikrofon je slyšet jen v jednom uchu → převést na mono"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <CheckBox x:Name="AppAudioOnlyCheck" Margin="78,12,0,0" Visibility="Collapsed"
+                                  Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                  Content="Systémový zvuk jen z nahrávané aplikace (bez notifikací a jiných programů)"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- VIDEO -->
+                <Border x:Name="VideoCard" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Text="VIDEO" Style="{StaticResource CardTitle}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="64"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="8"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Kvalita" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="QualityCombo" Grid.Column="1" SelectionChanged="AnySetting_Changed"/>
+                            <TextBlock Grid.Column="3" Text="Snímky" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="FpsCombo" Grid.Column="4" SelectionChanged="AnySetting_Changed"/>
+
+                            <TextBlock Grid.Row="2" Text="Rozlišení" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="ScaleCombo" Grid.Row="2" Grid.Column="1" SelectionChanged="AnySetting_Changed"/>
+                            <TextBlock Grid.Row="2" Grid.Column="3" Text="Kodek" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CodecCombo" Grid.Row="2" Grid.Column="4" SelectionChanged="AnySetting_Changed"/>
+                        </Grid>
+                        <Border Margin="0,12,0,0" Background="#0E1626" CornerRadius="7" Padding="10,7">
+                            <TextBlock x:Name="VideoInfoText" Foreground="#93C5FD" FontSize="12" TextWrapping="Wrap"/>
+                        </Border>
+                        <WrapPanel Margin="0,10,0,0">
+                            <CheckBox x:Name="CursorCheck" Content="Zobrazit kurzor myši" Margin="0,3,24,3"
+                                      Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"/>
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox x:Name="ClicksCheck" Content="Zvýraznit kliknutí" VerticalAlignment="Center"
+                                          Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"/>
+                                <Button x:Name="ClickEffectBtn" Margin="12,0,0,0" Padding="10,5" Click="ClickEffect_Click"
+                                        ToolTip="Galerie efektů: vzhled, barvy, velikost, délka a kruh kolem kurzoru">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="ClickColorDot" Width="11" Height="11" Fill="#E12028" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="ClickEffectText" Text="Efekt: Vlnka"/>
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE76C;" FontSize="10" Margin="8,1,0,0"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ULOŽIT DO -->
+                <Border x:Name="OutputCard" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Text="UKLÁDAT DO" Style="{StaticResource CardTitle}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="OutputFolderBox" IsReadOnly="True"/>
+                            <Button x:Name="ChangeFolderBtn" Grid.Column="2" Content="Změnit…" Click="ChangeFolder_Click"/>
+                            <Button Grid.Column="4" Click="OpenFolder_Click" Padding="9,7" ToolTip="Otevřít složku v Průzkumníku">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13"/>
+                            </Button>
+                        </Grid>
+                        <TextBlock x:Name="FreeSpaceText" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- DALŠÍ NASTAVENÍ -->
+                <ToggleButton x:Name="AdvancedToggle" Style="{StaticResource GhostToggle}" Content="Další nastavení" Margin="2,0,0,8"/>
+                <Border x:Name="AdvancedCard" Style="{StaticResource CardBorderStyle}"
+                        Visibility="{Binding IsChecked, ElementName=AdvancedToggle, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="180"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Odpočet" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CountdownCombo" Grid.Column="1" SelectionChanged="AnySetting_Changed"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="78"/>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Indikátor" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="IndicatorCombo" Grid.Column="1" SelectionChanged="AnySetting_Changed"/>
+                            <TextBlock Grid.Column="2" Style="{StaticResource Hint}" Margin="10,0,0,0" VerticalAlignment="Center"
+                                       Text="Blikající REC s časem a kontrolou zápisu. V nahrávce není vidět."/>
+                        </Grid>
+                        <CheckBox x:Name="MinimizeCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                  Content="Po spuštění nahrávání WINREC minimalizovat"/>
+                        <CheckBox x:Name="HideSelfCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                  Content="Okno WINREC se v nahrávce nikdy neobjeví (vidíte ho jen vy)"/>
+                        <CheckBox x:Name="GpuPriorityCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                  Content="Vysoká priorita GPU pro nahrávání (když GPU vytěžují jiné aplikace)"
+                                  ToolTip="Snímání obrazovky dostane u grafické karty přednost, takže nezačne zahazovat snímky. Projeví se po restartu WINREC."/>
+                        <CheckBox x:Name="CrashSafeCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                  Content="MP4 odolné proti pádu (fragmentované)"
+                                  ToolTip="Při pádu PC nebo výpadku proudu zůstane video přehratelné. Některé střihové programy s tímto formátem hůř pracují, proto je vypnuto."/>
+                        <CheckBox x:Name="DdCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                  Content="Alternativní metoda snímání obrazovky (Windows Graphics Capture)"
+                                  ToolTip="Výchozí metoda je Desktop Duplication. Obě nahrávají plynule 60 fps; tuto zapněte, jen když je nahraný obraz černý. Nahrávání samotného okna používá tuto metodu vždy."/>
+                        <CheckBox x:Name="DebugLogCheck" Checked="AnySetting_Changed" Unchecked="AnySetting_Changed"
+                                  Content="Podrobný log nahrávání (pro řešení problémů)"/>
+                        <Button Content="Otevřít složku s logy" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OpenLogs_Click"/>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ═══ Ovládání ═══ -->
+        <Border Grid.Row="2" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="0,1,0,0"
+                Padding="22,14,22,12">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="RecordButton" Style="{StaticResource RecButton}" Height="48" Click="Record_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="RecordButtonIcon" Style="{StaticResource Icon}" Text="&#xE7C8;" FontSize="16" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="RecordButtonText" Text="Nahrávat"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="PauseButton" Grid.Column="2" Height="48" Width="126" Click="Pause_Click" IsEnabled="False">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="PauseIcon" Style="{StaticResource Icon}" Text="&#xE769;" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="PauseText" Text="Pauza"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="MuteButton" Grid.Column="4" Height="48" Width="150" Click="Mute_Click" IsEnabled="False">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="MuteIcon" Style="{StaticResource Icon}" Text="&#xE720;" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="MuteText" Text="Ztlumit mikrofon"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <TextBlock x:Name="StatusText" Text="Připraveno." Foreground="{StaticResource Muted}" FontSize="12.5"
+                           Margin="2,10,0,0" TextWrapping="Wrap"/>
+                <StackPanel x:Name="LastFilePanel" Orientation="Horizontal" Margin="0,8,0,0" Visibility="Collapsed">
+                    <Button Click="PlayLast_Click" Padding="10,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE768;" FontSize="12" Margin="0,0,6,0"/>
+                            <TextBlock Text="Přehrát"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="ShowLast_Click" Padding="10,5" Margin="6,0,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="12" Margin="0,0,6,0"/>
+                            <TextBlock Text="Zobrazit ve složce"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <TextBlock x:Name="HotkeyText" Style="{StaticResource Hint}" Margin="2,10,0,0"
+                           Text="Ctrl+Shift+F9 nahrávat / zastavit   •   Ctrl+Shift+F10 pauza   •   Ctrl+Shift+F11 ztlumit mikrofon"/>
             </StackPanel>
         </Border>
-
-        <!-- Controls -->
-        <Grid Grid.Row="14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <Button x:Name="StartButton" Content="▶  Spustit záznam"
-                    Style="{StaticResource PrimaryButton}"
-                    FontSize="14" Height="42" Click="StartRecording_Click"/>
-            <Button Grid.Column="2" x:Name="StopButton" Content="■  Zastavit"
-                    Style="{StaticResource DangerButton}"
-                    FontSize="14" Height="42" Width="130"
-                    IsEnabled="False" Click="StopRecording_Click"/>
-        </Grid>
     </Grid>
 </Window>
