@@ -39,6 +39,8 @@ public sealed class RecordingEngine : IDisposable
     public long VideoBitrate { get; private set; }
     public bool HasMic => _micSource != null;
     public bool HasSystemAudio => _systemSource != null;
+    /// <summary>Knihovna aspoň jednou ohlásila stav Recording.</summary>
+    public bool HasStarted { get; private set; }
 
     // ── Hlídání, že se opravdu nahrává ──────────────────────────────────────
     private long _lastFrameTick, _lastAudioTick, _micSignalTick, _lastGrowTick, _resumedTick;
@@ -86,7 +88,7 @@ public sealed class RecordingEngine : IDisposable
             problems.Add("Soubor na disku neroste!");
         if ((_micSource != null || _systemSource != null) && now - Interlocked.Read(ref _lastAudioTick) > 3000)
             problems.Add("Nepřichází zvuk!");
-        if (_micSource != null && !_micMuted && _micIdSeen && now - Interlocked.Read(ref _micSignalTick) > 10000)
+        if (_micSource != null && !_micMuted && _micVolume >= 0.01 && _micIdSeen && now - Interlocked.Read(ref _micSignalTick) > 10000)
             problems.Add("Mikrofon nedává signál (Mute na mikrofonu?)");
         return new(size, problems);
     }
@@ -303,6 +305,7 @@ public sealed class RecordingEngine : IDisposable
         Log.Info($"Start: {r.Kind} {OutputWidth}x{OutputHeight}@{s.Fps} {s.Codec} {VideoBitrate / 1_000_000.0:0.#} Mbit/s, " +
                  $"zvuk={s.Audio}, api={api}, fMP4={s.CrashSafeMp4} → {r.OutputPath}");
 
+        HasStarted = false;
         _frames = 0;
         _audioPackets = 0;
         _lastSize = 0;
@@ -335,6 +338,7 @@ public sealed class RecordingEngine : IDisposable
         Status = e.Status;
         if (e.Status == RecorderStatus.Recording)
         {
+            HasStarted = true;
             if (previous != RecorderStatus.Recording) ResetHealthClock();
             _clock.Start();
         }

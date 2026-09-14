@@ -497,11 +497,14 @@ public sealed class CaptureKeepAlive : PhysicalWindow
     private readonly SolidColorBrush _a = new(Color.FromArgb(1, 0, 0, 0));
     private readonly SolidColorBrush _b = new(Color.FromArgb(2, 0, 0, 0));
     private readonly Border _pixel;
+    private readonly bool _reassertTopmost;
     private bool _flip;
+    private int _ticks;
 
-    public CaptureKeepAlive(MonitorInfo monitor, bool excludeFromCapture)
-        : base(new PxRect(monitor.Bounds.Right - 2, monitor.Bounds.Bottom - 2, 2, 2), clickThrough: true, excludeFromCapture)
+    public CaptureKeepAlive(MonitorInfo monitor, bool excludeFromCapture, bool reassertTopmost = true)
+        : base(Corner(monitor), clickThrough: true, excludeFromCapture)
     {
+        _reassertTopmost = reassertTopmost;
         _a.Freeze();
         _b.Freeze();
         _pixel = new Border { Background = _a };
@@ -510,10 +513,19 @@ public sealed class CaptureKeepAlive : PhysicalWindow
         Closed += (_, _) => CompositionTarget.Rendering -= Tick;
     }
 
+    // Pravý dolní roh PRACOVNÍ plochy — v rohu celého monitoru by bod zakryl hlavní panel.
+    private static PxRect Corner(MonitorInfo m)
+    {
+        var a = m.WorkArea.IsEmpty ? m.Bounds : m.WorkArea;
+        return new PxRect(a.Right - 2, a.Bottom - 2, 2, 2);
+    }
+
     private void Tick(object? sender, EventArgs e)
     {
         _flip = !_flip;
         _pixel.Background = _flip ? _b : _a;
+        // Jiná okna „vždy navrchu“ (hlavní panel, přehrávače) by bod mohla překrýt → ~6× za sekundu zpět navrch.
+        if (_reassertTopmost && ++_ticks % 10 == 0) Place();
     }
 }
 

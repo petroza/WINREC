@@ -77,6 +77,9 @@ public partial class MainWindow : Window
     private IntPtr _hwnd;
     private UiState _state = UiState.Idle;
     private bool _starting;
+    private bool _closed;
+    private DateTime _stopRequestedAt, _lastTickError;
+    private readonly DispatcherTimer _saveDebounce;
 
     private bool _loading = true;
     private bool _forceClose, _closeAfterStop, _minimizedByUs, _firstRecordingStatus, _micWavWanted, _lowSpaceStopped;
@@ -107,6 +110,10 @@ public partial class MainWindow : Window
 
         _ui = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(80) };
         _ui.Tick += (_, _) => UiTick();
+
+        // Nastavení se neukládá při každém pohybu posuvníku, ale až chvíli po poslední změně.
+        _saveDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _saveDebounce.Tick += (_, _) => { _saveDebounce.Stop(); _s.Save(); };
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
@@ -261,7 +268,8 @@ public partial class MainWindow : Window
         _s.DebugLog = DebugLogCheck.IsChecked == true;
         _s.OutputFolder = OutputFolderBox.Text;
         _s.LastRegion = _region is { } r ? [r.Left, r.Top, r.Width, r.Height] : null;
-        _s.Save();
+        _saveDebounce.Stop();
+        _saveDebounce.Start();
     }
 
     private static void SetChoices<T>(ComboBox cb, IReadOnlyList<Choice<T>> items, T selected)
@@ -571,6 +579,8 @@ public partial class MainWindow : Window
         UpdateVideoInfo();
         ReadUiToSettings();
         UpdateClickEffectButton();
+        // Skrytí z nahrávky platí hned (dřív až po restartu a vypnout nešlo).
+        if (_hwnd != IntPtr.Zero) Native.ExcludeFromCapture(_hwnd, HideSelfCheck.IsChecked == true);
     }
 
     private void UpdateClickEffectButton()
@@ -844,6 +854,7 @@ public partial class MainWindow : Window
             bool completed = await CountdownWindow.RunAsync(monitor, s.CountdownSeconds, _countdown.Token);
             _countdown.Dispose();
             _countdown = null;
+            if (_closed) return;   // okno zavřeno během odpočtu
             if (!completed)
             {
                 RestoreIfMinimizedByUs();
@@ -900,7 +911,7 @@ public partial class MainWindow : Window
         Native.KeepAwake(true);
         if (kind == SourceKind.Region)
         {
-            _frame = new RecordingFrame(region);
+            _frame = new RecordingFrame(region.Intersect(monitor!.Bounds));   // nahrává se jen část na tomto monitoru
             _frame.Show();
         }
         if ((s.HighlightClicks || s.CursorHalo) && kind != SourceKind.Window)
@@ -961,6 +972,7 @@ public partial class MainWindow : Window
     {
         if (engine != _engine) return;
         _engine = null;
+        _stopRequestedAt = default;
         var elapsed = engine.Elapsed;
         var wav = _audio.EndMicFile();
         Native.KeepAwake(false);
@@ -977,7 +989,15 @@ public partial class MainWindow : Window
         if (!_closeAfterStop) RestoreIfMinimizedByUs();
         SetUiState(UiState.Idle);
 
-        if (error == null && path != null)
+        long savedBytes = path != null && File.Exists(path) ? new FileInfo(path).Length : 0;
+        if (error == null && (!engine.HasStarted || savedBytes == 0))
+        {
+            // Stop dřív, než se nahrávání rozběhlo: knihovna hlásí „hotovo“, ale soubor je prázdný.
+            Log.Warn($"Nahrávání zastaveno před rozběhnutím ({path}, {savedBytes} B).");
+            SetStatus("Nahrávání bylo zastaveno dřív, než se rozběhlo — nic se neuložilo.", PauseBrush);
+            LastFilePanel.Visibility = Visibility.Collapsed;
+        }
+        else if (error == null && path != null)
         {
             _lastFile = path;
             long size = File.Exists(path) ? new FileInfo(path).Length : 0;
@@ -1006,6 +1026,7 @@ public partial class MainWindow : Window
     {
         if (_engine == null) return;
         SetUiState(UiState.Finishing);
+        _stopRequestedAt = DateTime.Now;
         try { _engine.Stop(); }
         catch (Exception ex)
         {
@@ -1141,6 +1162,23 @@ public partial class MainWindow : Window
 
     private void UiTick()
     {
+        try
+        {
+            UiTickCore();
+        }
+        catch (Exception ex)
+        {
+            // Chyba v časovači (běží 12× za sekundu) nesmí vyvolat smršť chybových oken — jen log, nejvýš 1× za 10 s.
+            if ((DateTime.Now - _lastTickError).TotalSeconds > 10)
+            {
+                _lastTickError = DateTime.Now;
+                Log.Error("Časovač UI", ex);
+            }
+        }
+    }
+
+    private void UiTickCore()
+    {
         var now = DateTime.Now;
         bool visible = IsVisible && WindowState != WindowState.Minimized;
         bool micMuted = _engine?.MicMuted == true;
@@ -1212,6 +1250,22 @@ public partial class MainWindow : Window
                               $"{_engine.OutputWidth} × {_engine.OutputHeight}, {_s.Fps} fps", paused ? PauseBrush : MutedBrush);
             }
 
+            // Pojistka: knihovna nepotvrdila dokončení → aplikace nesmí navždy viset v „Ukládám…“.
+            if (_state == UiState.Finishing && _stopRequestedAt != default)
+            {
+                double waited = (now - _stopRequestedAt).TotalSeconds;
+                double limit = _engine.HasStarted ? 90 : 10;
+                if (waited > limit)
+                {
+                    Log.Error($"Knihovna nepotvrdila uložení do {limit:0} s (rozběhnuto={_engine.HasStarted}) — přestávám čekat.");
+                    OnEngineFinished(_engine, null, _engine.HasStarted
+                        ? "Uložení videa se nepotvrdilo ani po 90 sekundách. Soubor nemusí být kompletní."
+                        : "Nahrávání se nestihlo rozběhnout a nepodařilo se ho korektně ukončit.");
+                    return;
+                }
+                if (waited > 15) SetStatus($"Ukládání trvá neobvykle dlouho ({waited:0} s)…", PauseBrush);
+            }
+
             if (FreeBytes() is { } free && free < 1L * 1024 * 1024 * 1024 && !_lowSpaceStopped && _state == UiState.Recording)
             {
                 Log.Warn($"Dochází místo ({free} B) — zastavuji.");
@@ -1276,12 +1330,40 @@ public partial class MainWindow : Window
                 return;
             }
             ReadUiToSettings();
+            _saveDebounce.Stop();
+            _s.Save();
         }
         base.OnClosing(e);
     }
 
+    /// <summary>
+    /// Windows se odhlašuje nebo vypíná: nahrávání dokončit synchronně (MP4 bez dokončení je nepřehratelné).
+    /// </summary>
+    public void EmergencyStop()
+    {
+        var engine = _engine;
+        if (engine == null) return;
+        Log.Warn("Windows ukončuje relaci během nahrávání — dokončuji video.");
+        var done = new ManualResetEventSlim();   // nedisponovat: pozdní událost z knihovny by jinak spadla
+        engine.Completed += _ => done.Set();
+        engine.Failed += _ => done.Set();
+        try { engine.Stop(); }
+        catch (Exception ex) { Log.Error("Nouzové zastavení", ex); }
+        bool ok = done.Wait(10_000);
+        _audio.EndMicFile();
+        Native.KeepAwake(false);
+        Log.Info("Nouzové zastavení: " + (ok ? "video uloženo" : "uložení nepotvrzeno do 10 s"));
+        _forceClose = true;
+    }
+
     protected override void OnClosed(EventArgs e)
     {
+        _closed = true;
+        if (_saveDebounce.IsEnabled)
+        {
+            _saveDebounce.Stop();
+            _s.Save();
+        }
         _ui.Stop();
         if (_hwnd != IntPtr.Zero)
         {

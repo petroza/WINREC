@@ -28,6 +28,7 @@ public sealed class AudioHub : IDisposable
 
     private WasapiCapture? _mic;
     private string? _micId;
+    private volatile bool _micFailed;
     private MMDevice? _output;
     private string? _outputId;
     private WaveFileWriter? _wav;
@@ -86,9 +87,12 @@ public sealed class AudioHub : IDisposable
     /// <summary>Nejlepší kandidát na mikrofon: výchozí skutečný mikrofon, jinak první skutečný.</summary>
     public static AudioDevice? PickBestMic(IReadOnlyList<AudioDevice> mics, string? preferredId)
     {
-        return mics.FirstOrDefault(m => m.Id == preferredId)
-            ?? mics.FirstOrDefault(m => m.IsDefault && !m.IsNotRealMic)
-            ?? mics.FirstOrDefault(m => !m.IsNotRealMic);
+        var preferred = mics.FirstOrDefault(m => m.Id == preferredId);
+        if (preferred != null && !preferred.IsNotRealMic) return preferred;
+        // Uložená volba „Směšovač stereo“ nesmí přebít čerstvě připojený skutečný mikrofon.
+        return mics.FirstOrDefault(m => m.IsDefault && !m.IsNotRealMic)
+            ?? mics.FirstOrDefault(m => !m.IsNotRealMic)
+            ?? preferred;
     }
 
     // ── Výstup (systémový zvuk) ─────────────────────────────────────────────
@@ -123,7 +127,8 @@ public sealed class AudioHub : IDisposable
             if (_wav == null) CloseMic();
             return;
         }
-        if (_mic != null && _micId == id) return;
+        // Po odpojení zůstane zachytávání zastavené — se stejným ID je nutné ho otevřít znovu, jinak by měřič i WAV byly mrtvé.
+        if (_mic != null && _micId == id && !_micFailed) return;
         if (_wav != null) return; // během zápisu WAV zařízení neměníme
         CloseMic();
 
@@ -136,6 +141,7 @@ public sealed class AudioHub : IDisposable
             {
                 if (e.Exception != null)
                 {
+                    _micFailed = true;
                     MicError = "Mikrofon přestal odpovídat (odpojen?).";
                     Log.Error("Mikrofon zastaven", e.Exception);
                     DevicesChanged?.Invoke();
@@ -144,6 +150,7 @@ public sealed class AudioHub : IDisposable
             cap.StartRecording();
             _mic = cap;
             _micId = id;
+            _micFailed = false;
             MicError = null;
         }
         catch (Exception ex)
@@ -222,13 +229,13 @@ public sealed class AudioHub : IDisposable
         }
     }
 
-    public bool IsMicOpen => _mic != null;
+    public bool IsMicOpen => _mic != null && !_micFailed;
 
     // ── Samostatný WAV mikrofonu ────────────────────────────────────────────
     public bool BeginMicFile(string path)
     {
         var cap = _mic;
-        if (cap == null) return false;
+        if (cap == null || _micFailed) return false;
         lock (_gate)
         {
             try

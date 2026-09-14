@@ -70,6 +70,10 @@ public static class SelfTest
             if (Explicit("K1")) failures += KeepAliveCase(W, dir, audio, main, "K1", dd: true, mode: 1);
             if (Explicit("K2")) failures += KeepAliveCase(W, dir, audio, main, "K2", dd: true, mode: 2);
             if (Explicit("K3")) failures += KeepAliveCase(W, dir, audio, main, "K3", dd: false, mode: 2);
+            if (Explicit("K4")) failures += CoveredKeepAliveCase(W, dir, audio, main, "K4", reassert: true);
+            if (Explicit("K5")) failures += CoveredKeepAliveCase(W, dir, audio, main, "K5", reassert: false);
+            if (Explicit("S")) failures += StopImmediatelyCase(W, dir, main);
+            if (Explicit("X")) failures += EffectPlacementCase(W, dir, main);
 
             if (Want("E"))
                 failures += Case(W, dir, audio, "E_monitor_30s_kontrola_zapisu",
@@ -158,7 +162,7 @@ public static class SelfTest
         int result = Case(W, dir, audio, name,
             new AppSettings { Audio = AudioMode.None, Scale = OutputScale.P1080, UseGraphicsCaptureForScreen = !desktopDuplication },
             SourceKind.Monitor, main, default, null, null, false, 13, false,
-            onRecording: () => Interlocked.CompareExchange(ref recordStartTick, clock.ElapsedTicks, 0));
+            onRecording: () => Interlocked.CompareExchange(ref recordStartTick, clock.ElapsedTicks, 0), keepAlive: false);
         if (recordStartTick != 0)
             W($"    záznam skutečně začal v {recordStartTick / (double)Stopwatch.Frequency:0.00} s času testu " +
               "(čas události minus tato hodnota = čas ve videu)");
@@ -167,6 +171,169 @@ public static class SelfTest
         lock (events) W($"    události (od startu testu, záznam začal ~0,1 s po něm): {string.Join(", ", events)}");
         dispatcher?.InvokeShutdown();
         return result;
+    }
+
+    /// <summary>„Živou plochu“ překrývá jiné okno vždy navrchu (jako hlavní panel) — pomáhá ji vytahovat zpět navrch?</summary>
+    private static int CoveredKeepAliveCase(Action<string> W, string dir, AudioHub audio, MonitorInfo main, string id, bool reassert)
+    {
+        System.Windows.Threading.Dispatcher? dispatcher = null;
+        using var ready = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+            new CaptureKeepAlive(main, excludeFromCapture: true, reassertTopmost: reassert).Show();
+            var a = main.WorkArea.IsEmpty ? main.Bounds : main.WorkArea;
+            var cover = new PhysicalWindow(new PxRect(a.Right - 300, a.Bottom - 300, 300, 300), clickThrough: true, excludeFromCapture: false)
+            {
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(20, 60, 110))
+            };
+            cover.Show();
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            timer.Tick += (_, _) => cover.MoveTo(cover.Target);   // kryt se neustále dere navrch
+            timer.Start();
+            ready.Set();
+            System.Windows.Threading.Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        ready.Wait(5000);
+        Thread.Sleep(500);
+
+        int result = Case(W, dir, audio, $"{id}_DD_zakryta_zivaPlocha_{(reassert ? "vytahovana" : "nevytahovana")}_15s",
+            new AppSettings { Audio = AudioMode.None }, SourceKind.Monitor, main, default, null, null, false, 15, false, keepAlive: false);
+        dispatcher?.InvokeShutdown();
+        return result;
+    }
+
+    /// <summary>Stop hned po startu — aplikace nesmí zůstat viset v „Ukládám…“.</summary>
+    private static int StopImmediatelyCase(Action<string> W, string dir, MonitorInfo main)
+    {
+        int fails = 0;
+        foreach (var delayMs in new[] { 0, 60, 300 })
+        {
+            string name = $"S_stop_po_{delayMs}ms";
+            var path = Path.Combine(dir, name + ".mp4");
+            var engine = new RecordingEngine();
+            var done = new ManualResetEventSlim();   // nedisponovat — pozdní události
+            string? result = null;
+            var statuses = new List<string>();
+            engine.StatusChanged += st => { lock (statuses) statuses.Add(st.ToString()); };
+            engine.Completed += _ => { result = "hotovo"; done.Set(); };
+            engine.Failed += e => { result = "chyba: " + e; done.Set(); };
+            try
+            {
+                engine.Start(new RecordingRequest
+                {
+                    Kind = SourceKind.Monitor,
+                    Settings = new AppSettings { Audio = AudioMode.SystemOnly, Scale = OutputScale.P1080 },
+                    OutputPath = path,
+                    Monitor = main
+                });
+            }
+            catch (Exception ex)
+            {
+                W($"[{name}] START SELHAL: {ex.Message}");
+                fails++;
+                continue;
+            }
+            if (delayMs > 0) Thread.Sleep(delayMs);
+            var sw = Stopwatch.StartNew();
+            engine.Stop();
+            bool finished = done.Wait(15_000);
+            string st;
+            lock (statuses) st = string.Join(">", statuses);
+            W($"[{name}] dokončeno={finished} za {sw.ElapsedMilliseconds} ms výsledek={result ?? "-"} stavy={st} " +
+              $"rozběhnuto={engine.HasStarted} velikost={(File.Exists(path) ? new FileInfo(path).Length : -1)}");
+            if (finished) engine.Dispose();
+            else fails++;
+        }
+        return fails;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hWnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hWnd, IntPtr hdc);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int w, int h);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr hdc, IntPtr obj);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint rop);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr hdc);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
+
+    /// <summary>Snímek části obrazovky ve fyzických px (včetně průhledných oken).</summary>
+    private static System.Windows.Media.Imaging.BitmapSource CaptureScreen(int x, int y, int w, int h)
+    {
+        IntPtr screen = GetDC(IntPtr.Zero), mem = CreateCompatibleDC(screen), bmp = CreateCompatibleBitmap(screen, w, h);
+        var old = SelectObject(mem, bmp);
+        BitBlt(mem, 0, 0, w, h, screen, x, y, 0x00CC0020 | 0x40000000 /* SRCCOPY | CAPTUREBLT */);
+        SelectObject(mem, old);
+        var src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(bmp, IntPtr.Zero, System.Windows.Int32Rect.Empty,
+            System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+        var copy = new System.Windows.Media.Imaging.WriteableBitmap(
+            new System.Windows.Media.Imaging.FormatConvertedBitmap(src, System.Windows.Media.PixelFormats.Bgra32, null, 0));
+        copy.Freeze();
+        DeleteObject(bmp);
+        DeleteDC(mem);
+        ReleaseDC(IntPtr.Zero, screen);
+        return copy;
+    }
+
+    /// <summary>Efekt kliknutí se musí vykreslit přesně na místě kliknutí (fyzické px, DPI).</summary>
+    private static int EffectPlacementCase(Action<string> W, string dir, MonitorInfo main)
+    {
+        var a = main.WorkArea.IsEmpty ? main.Bounds : main.WorkArea;
+        int cx = a.Left + a.Width / 3, cy = a.Top + a.Height / 3;
+        System.Windows.Threading.Dispatcher? dispatcher = null;
+        EffectWindow? win = null;
+        using var ready = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+            win = new EffectWindow();
+            win.Show();
+            System.Windows.Media.CompositionTarget.Rendering += (_, _) => win.Tick();
+            ready.Set();
+            System.Windows.Threading.Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        ready.Wait(5000);
+        Thread.Sleep(300);
+
+        const int half = 160;
+        int size = half * 2;
+        // Snímek PŘED efektem — počítají se jen pixely, které se purpurovými staly až efektem
+        // (jinak by výsledek zkreslily fialové ikony na ploše).
+        var before = CaptureScreen(cx - half, cy - half, size, size);
+
+        var magenta = System.Windows.Media.Color.FromRgb(255, 0, 255);
+        var style = new ClickStyle(true, ClickEffect.Pulse, magenta, magenta, 1.0, 2000, false);
+        dispatcher!.Invoke(() => win!.Play(style, cx, cy, false, main.Scale));
+        Thread.Sleep(350);
+        var shot = CaptureScreen(cx - half, cy - half, size, size);
+        dispatcher.InvokeShutdown();
+
+        var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(shot));
+        using (var fs = File.Create(Path.Combine(dir, "X_efekt_pulz.png"))) enc.Save(fs);
+
+        var px = new byte[size * size * 4];
+        var px0 = new byte[size * size * 4];
+        shot.CopyPixels(px, size * 4, 0);
+        before.CopyPixels(px0, size * 4, 0);
+        static bool IsMagenta(byte[] p, int i) => p[i + 2] > 150 && p[i] > 150 && p[i + 1] < 100;
+        long count = 0;
+        double sx = 0, sy = 0;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                int i = (y * size + x) * 4;
+                if (IsMagenta(px, i) && !IsMagenta(px0, i)) { count++; sx += x; sy += y; }
+            }
+        double dx = count > 0 ? sx / count - half : double.NaN, dy = count > 0 ? sy / count - half : double.NaN;
+        W($"[X_efekt] bod kliknutí {cx},{cy} (měřítko {main.Scale}); purpurových pixelů={count}, těžiště posunuté o ({dx:0.0}; {dy:0.0}) px");
+        return count > 100 && Math.Abs(dx) < 6 && Math.Abs(dy) < 6 ? 0 : 1;
     }
 
     /// <param name="mode">0 = bez „živé plochy“, 1 = viditelná pro nahrávání, 2 = vyjmutá z nahrávání</param>
@@ -190,7 +357,7 @@ public static class SelfTest
         string variant = mode switch { 0 => "bez", 1 => "zivaPlocha_viditelna", _ => "zivaPlocha_vyjmuta" };
         int result = Case(W, dir, audio, $"{id}_{(dd ? "DD" : "WGC")}_{variant}_15s",
             new AppSettings { Audio = AudioMode.None, UseGraphicsCaptureForScreen = !dd },
-            SourceKind.Monitor, main, default, null, null, false, 15, false);
+            SourceKind.Monitor, main, default, null, null, false, 15, false, keepAlive: false);
         dispatcher?.InvokeShutdown();
         return result;
     }
@@ -245,7 +412,38 @@ public static class SelfTest
 
     private static int Case(Action<string> W, string dir, AudioHub audio, string name, AppSettings s, SourceKind kind,
         MonitorInfo? monitor, PxRect region, TopWindow? window, string? micId, bool wav, int seconds, bool pause,
-        Action? onRecording = null)
+        Action? onRecording = null, bool keepAlive = true)
+    {
+        // Stejně jako aplikace: při nahrávání obrazovky/oblasti běží „živá plocha“ (jinak test měří jiné chování než reálné nahrávání).
+        System.Windows.Threading.Dispatcher? keepAliveDispatcher = null;
+        if (keepAlive && kind != SourceKind.Window && monitor != null)
+        {
+            using var kaReady = new ManualResetEventSlim();
+            var kaThread = new Thread(() =>
+            {
+                keepAliveDispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+                new CaptureKeepAlive(monitor, excludeFromCapture: true).Show();
+                kaReady.Set();
+                System.Windows.Threading.Dispatcher.Run();
+            });
+            kaThread.SetApartmentState(ApartmentState.STA);
+            kaThread.IsBackground = true;
+            kaThread.Start();
+            kaReady.Wait(5000);
+        }
+        try
+        {
+            return CaseCore(W, dir, audio, name, s, kind, monitor, region, window, micId, wav, seconds, pause, onRecording);
+        }
+        finally
+        {
+            keepAliveDispatcher?.InvokeShutdown();
+        }
+    }
+
+    private static int CaseCore(Action<string> W, string dir, AudioHub audio, string name, AppSettings s, SourceKind kind,
+        MonitorInfo? monitor, PxRect region, TopWindow? window, string? micId, bool wav, int seconds, bool pause,
+        Action? onRecording)
     {
         s.DebugLog = true;
         var path = Path.Combine(dir, name + ".mp4");

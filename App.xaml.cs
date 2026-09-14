@@ -65,6 +65,8 @@ public partial class App : Application
 
         var main = new MainWindow(settings);
         MainWindow = main;
+        // Odhlášení / vypnutí Windows: nahrávání dokončit, jinak by MP4 zůstalo nepřehratelné.
+        SessionEnding += (_, _) => main.EmergencyStop();
 
         if (args.Length >= 2 && args[0] == "--screenshot")
         {
@@ -145,12 +147,15 @@ public partial class App : Application
         return true;
     }
 
-    private static int _fatalShown;
+    private static bool _fatalShowing;
+    private static DateTime _lastFatalShown;
 
     private static void Fatal(string title, Exception? ex)
     {
         Log.Error(title, ex);
-        if (Interlocked.Exchange(ref _fatalShown, 1) == 1) return;
+        // Opakující se chyba nesmí zaplavit obrazovku okny — nejvýš jedno okno za 30 s, vše ostatní jen do logu.
+        if (_fatalShowing || (DateTime.Now - _lastFatalShown).TotalSeconds < 30) return;
+        _fatalShowing = true;
         try
         {
             string hint = ex is FileNotFoundException or DllNotFoundException or BadImageFormatException
@@ -162,7 +167,8 @@ public partial class App : Application
         catch { }
         finally
         {
-            Interlocked.Exchange(ref _fatalShown, 0);
+            _fatalShowing = false;
+            _lastFatalShown = DateTime.Now;
         }
     }
 }
