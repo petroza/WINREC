@@ -6,3 +6,9 @@ obj/
 *.userprefs
 *.DS_Store
 packages/
+
+# WINREC 2.0
+runtime/
+WINREC/
+*.log
+
