@@ -169,6 +169,7 @@ public partial class MainWindow : Window
         _loading = false;
 
         SyncFhdState();
+        UpdateCountdownUi();
         UpdateSourceUi();
         UpdateAudioUi();
         UpdateVideoInfo();
@@ -285,6 +286,36 @@ public partial class MainWindow : Window
     }
 
     private static T Selected<T>(ComboBox cb, T fallback) => cb.SelectedItem is Choice<T> c ? c.Value : fallback;
+
+    private static void SelectComboValue<T>(ComboBox cb, T value)
+    {
+        var item = cb.Items.OfType<Choice<T>>().FirstOrDefault(i => EqualityComparer<T>.Default.Equals(i.Value, value));
+        if (item != null) cb.SelectedItem = item;
+    }
+
+    // Zaškrtávátko „Odpočet“ v hlavní liště a rozbalovací volba délky v „Další nastavení“ sdílí jednu hodnotu.
+    private void UpdateCountdownUi()
+    {
+        if (CountdownCheck == null) return;
+        int secs = Selected(CountdownCombo, 0);
+        bool was = _loading;
+        _loading = true;
+        CountdownCheck.IsChecked = secs > 0;
+        _loading = was;
+        CountdownCheck.Content = secs > 0 ? $"Odpočet {secs} s před nahráváním" : "Bez odpočtu — nahrávat hned";
+    }
+
+    private void Countdown_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        bool on = CountdownCheck.IsChecked == true;
+        int secs = on ? (Selected(CountdownCombo, 0) > 0 ? Selected(CountdownCombo, 0) : 3) : 0;
+        _loading = true;
+        SelectComboValue(CountdownCombo, secs);
+        _loading = false;
+        UpdateCountdownUi();
+        ReadUiToSettings();
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     //  Zdroj obrazu
@@ -675,6 +706,7 @@ public partial class MainWindow : Window
         UpdateVideoInfo();
         ReadUiToSettings();
         UpdateClickEffectButton();
+        UpdateCountdownUi();
         // Skrytí z nahrávky platí hned (dřív až po restartu a vypnout nešlo).
         if (_hwnd != IntPtr.Zero) Native.ExcludeFromCapture(_hwnd, HideSelfCheck.IsChecked == true);
     }
@@ -1184,7 +1216,7 @@ public partial class MainWindow : Window
         foreach (var el in new UIElement[]
                  {
                      SourceCard, VideoCard, OutputCard, AdvancedCard, AudioModeCombo, OutputCombo, MicCombo,
-                     RefreshAudioBtn, MicMonoCheck, SaveWavCheck, AppAudioOnlyCheck
+                     RefreshAudioBtn, MicMonoCheck, SaveWavCheck, AppAudioOnlyCheck, CountdownCheck
                  })
             el.IsEnabled = idle;
 

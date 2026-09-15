@@ -369,8 +369,11 @@
 
         <!-- ═══ Ovládání ═══ -->
         <Border Grid.Row="2" Background="{StaticResource Card}" BorderBrush="{StaticResource CardBorder}" BorderThickness="0,1,0,0"
-                Padding="22,14,22,12">
+                Padding="22,12,22,12">
             <StackPanel>
+                <CheckBox x:Name="CountdownCheck" Margin="2,0,0,10" Checked="Countdown_Changed" Unchecked="Countdown_Changed"
+                          Content="Odpočet 3 s před nahráváním"
+                          ToolTip="Odškrtněte, chcete-li začít nahrávat hned, bez odpočtu. Délku odpočtu (3 / 5 / 10 s) změníte v „Další nastavení“."/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
