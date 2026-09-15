@@ -104,26 +104,46 @@
                                        Text="Okno se nahrává i když je překryté jiným oknem. Minimalizované okno nahrát nejde. Pro nejplynulejší video (a efekty kliknutí) nahrávejte raději celou obrazovku nebo oblast."/>
                         </StackPanel>
 
-                        <Grid x:Name="RegionPanel" Margin="0,12,0,0" Visibility="Collapsed">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="78"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Oblast" Style="{StaticResource FieldLabel}"/>
-                            <Border Grid.Column="1" Background="{StaticResource Field}" BorderBrush="{StaticResource FieldBorder}"
-                                    BorderThickness="1" CornerRadius="7" Padding="10,7">
-                                <TextBlock x:Name="RegionText" Text="Zatím nevybráno" TextTrimming="CharacterEllipsis"/>
-                            </Border>
-                            <Button x:Name="PickRegionBtn" Grid.Column="3" Click="PickRegion_Click"
-                                    ToolTip="Skryje WINREC a nechá vás myší označit obdélník na obrazovce.">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE7A8;" Margin="0,0,7,0"/>
-                                    <TextBlock Text="Vybrat myší"/>
-                                </StackPanel>
-                            </Button>
-                        </Grid>
+                        <StackPanel x:Name="RegionPanel" Margin="0,12,0,0" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="78"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Oblast" Style="{StaticResource FieldLabel}"/>
+                                <Border Grid.Column="1" Background="{StaticResource Field}" BorderBrush="{StaticResource FieldBorder}"
+                                        BorderThickness="1" CornerRadius="7" Padding="10,7">
+                                    <TextBlock x:Name="RegionText" Text="Zatím nevybráno" TextTrimming="CharacterEllipsis"/>
+                                </Border>
+                                <Button x:Name="PickRegionBtn" Grid.Column="3" Click="PickRegion_Click"
+                                        ToolTip="Skryje WINREC a nechá vás myší označit obdélník na obrazovce.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE7A8;" Margin="0,0,7,0"/>
+                                        <TextBlock Text="Vybrat myší"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                            <CheckBox x:Name="FhdFrameCheck" Margin="78,12,0,0" Checked="Fhd_Changed" Unchecked="Fhd_Changed"
+                                      Content="Pevný rámeček 1920×1080 na střed monitoru"
+                                      ToolTip="Nahrává vždy stejný obdélník uprostřed monitoru. Okna do něj zarovnáte tlačítkem níže nebo zkratkou Ctrl+Shift+F8. Ideální, když chcete, aby různé aplikace v nahrávkách seděly na stejné místo."/>
+                            <Grid Margin="78,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="SnapFhdBtn" Click="SnapFhd_Click" IsEnabled="False" Padding="10,6"
+                                        ToolTip="Necháte kliknout na okno a WINREC ho posadí přesně do FHD rámečku.">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE744;" Margin="0,0,7,0"/>
+                                        <TextBlock Text="Zarovnat okno do rámečku…"/>
+                                    </StackPanel>
+                                </Button>
+                                <TextBlock Grid.Column="1" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                           Text="nebo Ctrl+Shift+F8 na právě aktivní okno"/>
+                            </Grid>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -396,7 +416,7 @@
                     </Button>
                 </StackPanel>
                 <TextBlock x:Name="HotkeyText" Style="{StaticResource Hint}" Margin="2,10,0,0"
-                           Text="Ctrl+Shift+F9 nahrávat / zastavit   •   Ctrl+Shift+F10 pauza   •   Ctrl+Shift+F11 ztlumit mikrofon"/>
+                           Text="Ctrl+Shift+F9 nahrávat / zastavit   •   F10 pauza   •   F11 mikrofon   •   F8 zarovnat okno do FHD rámečku"/>
             </StackPanel>
         </Border>
     </Grid>

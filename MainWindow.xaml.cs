@@ -52,8 +52,8 @@ public partial class MainWindow : Window
 {
     private enum UiState { Idle, Countdown, Recording, Paused, Finishing }
 
-    private const int HkStartStop = 1, HkPause = 2, HkMute = 3;
-    private const uint VK_F9 = 0x78, VK_F10 = 0x79, VK_F11 = 0x7A;
+    private const int HkStartStop = 1, HkPause = 2, HkMute = 3, HkSnapFhd = 4;
+    private const uint VK_F8 = 0x77, VK_F9 = 0x78, VK_F10 = 0x79, VK_F11 = 0x7A;
 
     private readonly AppSettings _s;
     private readonly AudioHub _audio;
@@ -63,6 +63,7 @@ public partial class MainWindow : Window
 
     private RecordingEngine? _engine;
     private RecordingFrame? _frame;
+    private FhdPreviewFrame? _fhdPreview;
     private RecordingIndicator? _indicator;
     private ClickEffectsController? _clicks;
     private CaptureKeepAlive? _keepAlive;
@@ -140,6 +141,7 @@ public partial class MainWindow : Window
         if (!Native.RegisterHotKey(_hwnd, HkStartStop, mods, VK_F9)) failed.Add("Ctrl+Shift+F9");
         if (!Native.RegisterHotKey(_hwnd, HkPause, mods, VK_F10)) failed.Add("Ctrl+Shift+F10");
         if (!Native.RegisterHotKey(_hwnd, HkMute, mods, VK_F11)) failed.Add("Ctrl+Shift+F11");
+        if (!Native.RegisterHotKey(_hwnd, HkSnapFhd, mods, VK_F8)) failed.Add("Ctrl+Shift+F8");
         if (failed.Count > 0)
         {
             HotkeyText.Text += $"\nPozor: zkratky {string.Join(", ", failed)} používá jiný program.";
@@ -166,6 +168,7 @@ public partial class MainWindow : Window
         }
         _loading = false;
 
+        SyncFhdState();
         UpdateSourceUi();
         UpdateAudioUi();
         UpdateVideoInfo();
@@ -229,6 +232,7 @@ public partial class MainWindow : Window
         CrashSafeCheck.IsChecked = _s.CrashSafeMp4;
         DdCheck.IsChecked = _s.UseGraphicsCaptureForScreen;
         DebugLogCheck.IsChecked = _s.DebugLog;
+        FhdFrameCheck.IsChecked = _s.FhdFrame;
         OutputFolderBox.Text = _s.OutputFolder;
         UpdateClickEffectButton();
 
@@ -267,6 +271,7 @@ public partial class MainWindow : Window
         _s.UseGraphicsCaptureForScreen = DdCheck.IsChecked == true;
         _s.DebugLog = DebugLogCheck.IsChecked == true;
         _s.OutputFolder = OutputFolderBox.Text;
+        _s.FhdFrame = FhdFrameCheck.IsChecked == true;
         _s.LastRegion = _region is { } r ? [r.Left, r.Top, r.Width, r.Height] : null;
         _saveDebounce.Stop();
         _saveDebounce.Start();
@@ -374,7 +379,12 @@ public partial class MainWindow : Window
         WindowPanel.Visibility = kind == SourceKind.Window ? Visibility.Visible : Visibility.Collapsed;
         RegionPanel.Visibility = kind == SourceKind.Region ? Visibility.Visible : Visibility.Collapsed;
 
-        if (_region is { } r)
+        if (FhdFrameCheck.IsChecked == true)
+        {
+            RegionText.Text = "1920 × 1080 na střed monitoru";
+            RegionText.Foreground = Brushes.White;
+        }
+        else if (_region is { } r)
         {
             var mon = Native.GetMonitors().FirstOrDefault(m => m.Bounds.Contains(r.Left + r.Width / 2, r.Top + r.Height / 2));
             RegionText.Text = $"{r.Width} × {r.Height} px   ·   od bodu {r.Left - (mon?.Bounds.Left ?? 0)}, {r.Top - (mon?.Bounds.Top ?? 0)}";
@@ -385,6 +395,92 @@ public partial class MainWindow : Window
             RegionText.Text = "Zatím nevybráno — klikněte na „Vybrat myší“";
             RegionText.Foreground = MutedBrush;
         }
+    }
+
+    // ── FHD rámeček na střed monitoru ───────────────────────────────────────
+    private MonitorInfo TargetMonitorForFhd()
+    {
+        var mons = Native.GetMonitors();
+        if (_hwnd != IntPtr.Zero)
+        {
+            var wb = Native.GetWindowBounds(_hwnd);
+            var m = mons.FirstOrDefault(x => x.Bounds.Contains(wb.Left + wb.Width / 2, wb.Top + wb.Height / 2));
+            if (m != null) return m;
+        }
+        return mons.FirstOrDefault(x => x.IsPrimary) ?? mons.First();
+    }
+
+    private void SyncFhdState()
+    {
+        bool on = FhdFrameCheck.IsChecked == true;
+        if (on)
+        {
+            SrcRegion.IsChecked = true;   // FHD rámeček znamená režim „Oblast“
+            _region = Native.CenteredFhd(TargetMonitorForFhd().Bounds);
+        }
+        PickRegionBtn.IsEnabled = !on;
+        SnapFhdBtn.IsEnabled = on;
+        UpdateSourceUi();
+        UpdateVideoInfo();
+        UpdateFhdPreview();
+    }
+
+    private void Fhd_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        SyncFhdState();
+        ReadUiToSettings();
+    }
+
+    private void UpdateFhdPreview()
+    {
+        bool show = FhdFrameCheck.IsChecked == true && _state == UiState.Idle;
+        if (!show)
+        {
+            _fhdPreview?.Close();
+            _fhdPreview = null;
+            return;
+        }
+        var rect = Native.CenteredFhd(TargetMonitorForFhd().Bounds);
+        _fhdPreview?.Close();   // vždy znovu, ať sedí velikost i po změně monitoru
+        _fhdPreview = new FhdPreviewFrame(rect);
+        _fhdPreview.Show();
+    }
+
+    private void SnapForegroundToFhd()
+    {
+        var hwnd = Native.GetForeground();
+        if (hwnd == IntPtr.Zero || hwnd == _hwnd)
+        {
+            SetStatus("Nejdřív klikněte do okna, které chcete zarovnat, pak stiskněte Ctrl+Shift+F8.", MutedBrush);
+            return;
+        }
+        var target = Native.CenteredFhd(TargetMonitorForFhd().Bounds);
+        bool ok = Native.SnapWindowVisibleBounds(hwnd, target);
+        var title = Native.GetTitle(hwnd);
+        if (title.Length > 40) title = title[..37] + "…";
+        SetStatus(ok ? $"Okno „{title}“ zarovnáno do FHD rámečku." : "Okno se nepodařilo zarovnat.", ok ? OkBrush : ErrBrush);
+        Log.Info($"Zarovnání do FHD (zkratka): '{title}' → {target}, ok={ok}");
+    }
+
+    private async void SnapFhd_Click(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        await Task.Delay(180);
+        TopWindow? picked = null;
+        try { picked = await OverlayPicker.PickWindowAsync([_hwnd]); }
+        catch (Exception ex) { Log.Error("Výběr okna pro zarovnání", ex); }
+        finally
+        {
+            Show();
+            Activate();
+        }
+        if (picked == null) return;
+        var target = Native.CenteredFhd(TargetMonitorForFhd().Bounds);
+        bool ok = Native.SnapWindowVisibleBounds(picked.Handle, target);
+        var title = picked.Title.Length > 40 ? picked.Title[..37] + "…" : picked.Title;
+        SetStatus(ok ? $"Okno „{title}“ zarovnáno do FHD rámečku." : "Okno se nepodařilo zarovnat.", ok ? OkBrush : ErrBrush);
+        Log.Info($"Zarovnání do FHD (tlačítko): '{title}' → {target}, ok={ok}");
     }
 
     private void WindowCombo_DropDownOpened(object? sender, EventArgs e) => RefreshWindows();
@@ -769,6 +865,8 @@ public partial class MainWindow : Window
                 break;
 
             case SourceKind.Region:
+                if (FhdFrameCheck.IsChecked == true)
+                    _region = Native.CenteredFhd(TargetMonitorForFhd().Bounds);
                 if (_region == null)
                 {
                     await PickRegionAsync();
@@ -1140,6 +1238,7 @@ public partial class MainWindow : Window
         if (idle) Title = "WINREC";
         if (st == UiState.Paused) SetStatus("Pozastaveno — pokračujte tlačítkem nebo Ctrl+Shift+F10.", PauseBrush);
         if (st == UiState.Finishing) SetStatus("Dokončuji a ukládám video…", MutedBrush);
+        UpdateFhdPreview();   // náhled rámečku jen v klidu, při nahrávání ho nahradí červený rámeček
     }
 
     private void SetStatus(string text, Brush brush)
@@ -1308,6 +1407,9 @@ public partial class MainWindow : Window
             case HkMute:
                 ToggleMute();
                 break;
+            case HkSnapFhd:
+                SnapForegroundToFhd();
+                break;
         }
         return IntPtr.Zero;
     }
@@ -1370,8 +1472,10 @@ public partial class MainWindow : Window
             Native.UnregisterHotKey(_hwnd, HkStartStop);
             Native.UnregisterHotKey(_hwnd, HkPause);
             Native.UnregisterHotKey(_hwnd, HkMute);
+            Native.UnregisterHotKey(_hwnd, HkSnapFhd);
         }
         _frame?.Close();
+        _fhdPreview?.Close();
         _indicator?.Close();
         _clicks?.Dispose();
         _keepAlive?.Close();

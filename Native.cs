@@ -89,6 +89,9 @@ internal static class Native
     [DllImport("user32.dll")] private static extern int GetWindowTextLength(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int pid);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rc);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int cmd);
+    [DllImport("user32.dll")] private static extern bool IsZoomed(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value);
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
@@ -141,7 +144,41 @@ internal static class Native
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     public static readonly IntPtr HWND_TOPMOST = new(-1);
-    public const uint SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
+    public const uint SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40, SWP_NOZORDER = 0x4;
+
+    public static IntPtr GetForeground() => GetForegroundWindow();
+
+    /// <summary>Obdélník 1920×1080 (nebo menší) přesně na střed monitoru, ve fyzických pixelech.</summary>
+    public static PxRect CenteredFhd(PxRect monitor, int w = 1920, int h = 1080)
+    {
+        int cw = Math.Min(w, monitor.Width) & ~1;
+        int ch = Math.Min(h, monitor.Height) & ~1;
+        int left = monitor.Left + (monitor.Width - cw) / 2;
+        int top = monitor.Top + (monitor.Height - ch) / 2;
+        return new PxRect(left, top, cw, ch);
+    }
+
+    /// <summary>
+    /// Posadí okno tak, aby jeho VIDITELNÉ hranice (bez neviditelného stínového okraje Win11)
+    /// přesně padly na cílový obdélník. Maximalizované/minimalizované okno nejdřív obnoví.
+    /// </summary>
+    public static bool SnapWindowVisibleBounds(IntPtr hWnd, PxRect target)
+    {
+        if (hWnd == IntPtr.Zero || !IsWindow(hWnd)) return false;
+        if (IsIconic(hWnd) || IsZoomed(hWnd))
+        {
+            ShowWindow(hWnd, 9 /* SW_RESTORE */);
+            System.Threading.Thread.Sleep(60);
+        }
+        if (!GetWindowRect(hWnd, out var o)) return false;
+        var v = GetWindowBounds(hWnd);   // viditelné hranice přes DWM
+        int dl = v.Left - o.Left, dt = v.Top - o.Top;
+        int dr = o.Right - v.Right, db = o.Bottom - v.Bottom;
+        return SetWindowPos(hWnd, IntPtr.Zero,
+            target.Left - dl, target.Top - dt,
+            target.Width + dl + dr, target.Height + dt + db,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+    }
 
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
     private const uint WDA_NONE = 0, WDA_EXCLUDEFROMCAPTURE = 0x11;

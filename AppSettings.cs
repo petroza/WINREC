@@ -18,6 +18,8 @@ public sealed class AppSettings
     public SourceKind Source { get; set; } = SourceKind.Monitor;
     public string? MonitorDevice { get; set; }
     public int[]? LastRegion { get; set; }
+    // Pevný rámeček 1920×1080 na střed monitoru (nahrává vždy stejný obdélník, okna se do něj zarovnávají).
+    public bool FhdFrame { get; set; }
 
     // Zvuk
     public AudioMode Audio { get; set; } = AudioMode.SystemAndMic;

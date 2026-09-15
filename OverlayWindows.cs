@@ -330,6 +330,48 @@ public sealed class RecordingFrame : PhysicalWindow
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  Náhled FHD rámečku (vidíte ho jen vy, v nahrávce není; kliknutí jím procházejí).
+//  Modrý přerušovaný obdélník ukazuje, kam se bude nahrávat, ať okna hezky naskládáte.
+// ════════════════════════════════════════════════════════════════════════════
+public sealed class FhdPreviewFrame : PhysicalWindow
+{
+    private const int Pad = 3;
+
+    public FhdPreviewFrame(PxRect region)
+        : base(new PxRect(region.Left - Pad, region.Top - Pad, region.Width + 2 * Pad, region.Height + 2 * Pad),
+               clickThrough: true, excludeFromCapture: true)
+    {
+        var accent = Color.FromRgb(0x3B, 0x82, 0xF6);
+        var rect = new Rectangle
+        {
+            Stroke = new SolidColorBrush(accent),
+            StrokeThickness = 2,
+            StrokeDashArray = new DoubleCollection { 6, 4 },
+            Fill = Brushes.Transparent
+        };
+        var label = new Border
+        {
+            Background = new SolidColorBrush(accent),
+            CornerRadius = new CornerRadius(0, 0, 6, 0),
+            Padding = new Thickness(8, 3, 8, 4),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Child = new TextBlock
+            {
+                Text = $"FHD rámeček  {region.Width} × {region.Height}",
+                Foreground = Brushes.White,
+                FontSize = 12,
+                FontFamily = new FontFamily("Segoe UI Semibold")
+            }
+        };
+        var grid = new Grid();
+        grid.Children.Add(rect);
+        grid.Children.Add(label);
+        Content = grid;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  Indikátor v rohu obrazovky: blikající tečka, čas, kontrola zápisu
 //  (vidíte ho vy, nahrávka ne; kliknutí jím procházejí)
 // ════════════════════════════════════════════════════════════════════════════

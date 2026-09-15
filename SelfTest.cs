@@ -74,6 +74,7 @@ public static class SelfTest
             if (Explicit("K5")) failures += CoveredKeepAliveCase(W, dir, audio, main, "K5", reassert: false);
             if (Explicit("S")) failures += StopImmediatelyCase(W, dir, main);
             if (Explicit("X")) failures += EffectPlacementCase(W, dir, main);
+            if (Explicit("P")) failures += SnapFhdCase(W, main);
 
             if (Want("E"))
                 failures += Case(W, dir, audio, "E_monitor_30s_kontrola_zapisu",
@@ -92,6 +93,51 @@ public static class SelfTest
         }
         W($"HOTOVO, chyb: {failures}");
         return failures;
+    }
+
+    /// <summary>Zarovnání okna do FHD rámečku na střed monitoru — viditelné hranice musí padnout na cíl na ± pár px.</summary>
+    private static int SnapFhdCase(Action<string> W, MonitorInfo main)
+    {
+        IntPtr hwnd = IntPtr.Zero;
+        string? err = null;
+        System.Windows.Threading.Dispatcher? dispatcher = null;
+        using var ready = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var w = new System.Windows.Window
+                {
+                    Title = "WINREC test zarovnání",
+                    Width = 500,
+                    Height = 360,
+                    Left = main.Bounds.Left + 60,
+                    Top = main.Bounds.Top + 60,
+                    WindowStartupLocation = System.Windows.WindowStartupLocation.Manual,
+                    ShowActivated = false,
+                    Background = System.Windows.Media.Brushes.SteelBlue
+                };
+                w.SourceInitialized += (_, _) => { hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle; ready.Set(); };
+                dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+                w.Show();
+                System.Windows.Threading.Dispatcher.Run();
+            }
+            catch (Exception ex) { err = ex.Message; ready.Set(); }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        if (!ready.Wait(10_000) || hwnd == IntPtr.Zero) { W($"[P_snap] testovací okno se neotevřelo (chyba={err ?? "timeout"})"); return 1; }
+        Thread.Sleep(300);
+
+        var target = Native.CenteredFhd(main.Bounds);
+        bool ok = Native.SnapWindowVisibleBounds(hwnd, target);
+        Thread.Sleep(250);
+        var v = Native.GetWindowBounds(hwnd);
+        int dl = v.Left - target.Left, dt = v.Top - target.Top, dw = v.Width - target.Width, dh = v.Height - target.Height;
+        W($"[P_snap] cíl={target}  výsledek={v}  odchylka L={dl} T={dt} Š={dw} V={dh}  SetWindowPos={ok}");
+        dispatcher?.InvokeShutdown();
+        return ok && Math.Abs(dl) <= 2 && Math.Abs(dt) <= 2 && Math.Abs(dw) <= 2 && Math.Abs(dh) <= 2 ? 0 : 1;
     }
 
     /// <summary>
